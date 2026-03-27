@@ -1,11 +1,9 @@
 #pragma once
 
-namespace llm
-{
+namespace llm {
 
 //==============================================================================
-enum class Provider
-{
+enum class Provider {
     OpenAIChat,       // Chat Completions — DeepSeek, OpenRouter, local llama-server
     OpenAIResponses,  // Responses API — GPT-5+
     Anthropic,        // Messages API — Claude models
@@ -13,30 +11,32 @@ enum class Provider
 };
 
 //==============================================================================
-struct ProviderConfig
-{
+struct ProviderConfig {
     Provider provider;
     juce::String baseUrl;
     juce::String apiKey;
     juce::String model;
 
     // Provider-specific options
-    bool noTemperature = false;           // GPT-5 doesn't support temperature
-    juce::String reasoningEffort;         // "minimal", "low", "medium", "high"
-    juce::String grammar;                 // GBNF grammar for llama-server
+    bool noTemperature = false;    // GPT-5 doesn't support temperature
+    juce::String reasoningEffort;  // "minimal", "low", "medium", "high"
+    juce::String grammar;          // GBNF grammar for llama-server
 };
 
 //==============================================================================
-struct Request
-{
+struct Request {
     juce::String systemPrompt;
     juce::String userMessage;
     float temperature = 0.1f;
+
+    /** Optional JSON schema for structured output.
+        Built via Schema::object(), Schema::array(), etc.
+        When set, providers will use their native structured output mechanism. */
+    juce::var schema;
 };
 
 //==============================================================================
-struct Response
-{
+struct Response {
     juce::String text;
     double wallSeconds = 0.0;
     bool success = false;
@@ -44,6 +44,6 @@ struct Response
 };
 
 //==============================================================================
-using ResponseCallback = std::function<void (Response)>;
+using ResponseCallback = std::function<void(Response)>;
 
-} // namespace llm
+}  // namespace llm

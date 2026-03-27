@@ -1,42 +1,48 @@
 #pragma once
 
-namespace llm
-{
+namespace llm {
 
 //==============================================================================
 /** Abstract base class for LLM provider clients.
-    Each provider implements buildPayload() and parseResponse().
-    The base class handles async HTTP via juce::URL on a background thread.
+    Each provider implements payload building, URL/header generation, and response parsing.
+    Includes a synchronous sendRequest() that handles HTTP transport via juce::URL.
 */
-class LLMClient
-{
-public:
-    explicit LLMClient (const ProviderConfig& config) : config_ (config) {}
+class LLMClient {
+  public:
+    explicit LLMClient(const ProviderConfig& config) : config_(config) {}
     virtual ~LLMClient() = default;
-
-    /** Send a request asynchronously. Callback is invoked on the message thread. */
-    void sendRequestAsync (const Request& request, ResponseCallback callback);
-
-    /** Send a request synchronously. Blocks the calling thread. */
-    Response sendRequest (const Request& request);
 
     /** Get the provider name for logging/debugging. */
     virtual juce::String getName() const = 0;
 
-protected:
-    /** Build the JSON payload for this provider. */
-    virtual juce::var buildPayload (const Request& request) const = 0;
+    //==============================================================================
+    // Data interface — override these in each provider
 
-    /** Build the full URL for the API endpoint. */
-    virtual juce::URL buildUrl() const = 0;
+    /** Build the JSON payload string for this provider. */
+    virtual juce::String buildRequestBody(const Request& request) const = 0;
 
-    /** Build HTTP headers for this provider. */
-    virtual juce::StringPairArray buildHeaders() const = 0;
+    /** Get the full endpoint URL. */
+    virtual juce::String getEndpointUrl() const = 0;
 
-    /** Parse the response JSON into a text string. */
-    virtual juce::String parseResponse (const juce::var& json) const = 0;
+    /** Get the HTTP headers as key-value pairs. */
+    virtual juce::StringPairArray getHeaders() const = 0;
 
+    /** Parse a JSON response string into a Response. */
+    virtual Response parseResponseBody(const juce::String& jsonString) const = 0;
+
+    //==============================================================================
+    // HTTP transport
+
+    /** Synchronous HTTP request. Call from any thread. */
+    Response sendRequest(const Request& request) const;
+
+    /** Access the config. */
+    const ProviderConfig& getConfig() const {
+        return config_;
+    }
+
+  protected:
     ProviderConfig config_;
 };
 
-} // namespace llm
+}  // namespace llm

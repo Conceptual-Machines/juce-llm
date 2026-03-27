@@ -1,0 +1,71 @@
+# Clang-Tidy Configuration for juce-llm
+
+Checks: >-
+  *,
+  -android-*,
+  -fuchsia-*,
+  -llvm-*,
+  -zircon-*,
+  -altera-*,
+  -llvmlibc-*,
+  -abseil-*,
+  -boost-*,
+  -google-build-using-namespace,
+  -google-readability-todo,
+  -hicpp-use-auto,
+  -hicpp-vararg,
+  -modernize-use-trailing-return-type,
+  -modernize-use-ranges,
+  -readability-container-contains,
+  -readability-redundant-casting,
+  -readability-make-member-function-const,
+  -readability-identifier-naming,
+  -readability-else-after-return,
+  -readability-implicit-bool-conversion,
+  -readability-named-parameter,
+  -readability-uppercase-literal-suffix,
+  -hicpp-uppercase-literal-suffix,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -readability-magic-numbers,
+  -cert-err58-cpp,
+  -misc-non-private-member-variables-in-classes,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -modernize-avoid-c-arrays,
+  -cppcoreguidelines-avoid-c-arrays,
+  -hicpp-avoid-c-arrays,
+  -readability-isolate-declaration,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-type-vararg,
+  -modernize-use-nodiscard,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -cppcoreguidelines-narrowing-conversions,
+  -misc-const-correctness,
+  -readability-identifier-length,
+  -cppcoreguidelines-avoid-do-while,
+  -clang-analyzer-deadcode.*,
+  -clang-analyzer-core.*,
+  -clang-diagnostic-unreachable-code,
+  -performance-avoid-endl,
+  -readability-braces-around-statements,
+  -hicpp-braces-around-statements,
+  -google-readability-braces-around-statements,
+  -readability-function-cognitive-complexity
+
+WarningsAsErrors: ''
+
+HeaderFilterRegex: 'juce_llm/.*\.(h|hpp)$'
+
+CheckOptions:
+  - key: readability-function-size.LineThreshold
+    value: '80'
+  - key: readability-function-size.StatementThreshold
+    value: '50'
+  - key: readability-function-size.BranchThreshold
+    value: '10'
+  - key: readability-function-size.ParameterThreshold
+    value: '8'
+  - key: performance-for-range-copy.WarnOnAllAutoCopies
+    value: 'true'
+  - key: performance-unnecessary-value-param.AllowedTypes
+    value: 'juce::String;juce::var;std::shared_ptr;std::unique_ptr'

@@ -20,10 +20,11 @@
 
 #include <juce_core/juce_core.h>
 
-#include "llm/LLMTypes.h"
 #include "llm/LLMClient.h"
 #include "llm/LLMClientFactory.h"
-#include "llm/providers/OpenAIChatClient.h"
-#include "llm/providers/OpenAIResponsesClient.h"
+#include "llm/LLMTypes.h"
+#include "llm/Schema.h"
 #include "llm/providers/AnthropicClient.h"
 #include "llm/providers/GeminiClient.h"
+#include "llm/providers/OpenAIChatClient.h"
+#include "llm/providers/OpenAIResponsesClient.h"

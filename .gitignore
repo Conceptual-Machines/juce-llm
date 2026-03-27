@@ -1,0 +1,25 @@
+# Build
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+*.o
+*.a
+*.dylib
+
+# IDE
+.idea/
+.vscode/
+*.xcodeproj/
+*.xcworkspace/
+compile_commands.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# JUCE
+JuceLibraryCode/
+
+# Env
+.env

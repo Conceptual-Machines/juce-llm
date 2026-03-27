@@ -1,0 +1,34 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v17.0.6
+    hooks:
+      - id: clang-format
+        files: \.(cpp|hpp|h|c|cc|cxx)$
+        args: [--style=file]
+
+  - repo: https://github.com/cheshirekow/cmake-format-precommit
+    rev: v0.6.13
+    hooks:
+      - id: cmake-format
+        files: CMakeLists\.txt$|\.cmake$
+        args: [--line-width=80, --tab-size=4]
+
+ci:
+  autofix_prs: true
+  autoupdate_schedule: quarterly
+
+default_stages: [pre-commit]
+minimum_pre_commit_version: 2.20.0

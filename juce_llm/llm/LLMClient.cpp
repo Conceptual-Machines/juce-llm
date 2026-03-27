@@ -1,62 +1,42 @@
-namespace llm
-{
+namespace llm {
 
-//==============================================================================
-Response LLMClient::sendRequest (const Request& request)
-{
+Response LLMClient::sendRequest(const Request& request) const {
     Response response;
-
-    auto url = buildUrl().withPOSTData (juce::JSON::toString (buildPayload (request)));
-    auto headers = buildHeaders();
-
-    for (int i = 0; i < headers.size(); ++i)
-        url = url.withExtraHeader (headers.getAllKeys()[i], headers.getAllValues()[i]);
-
     auto startTime = juce::Time::getMillisecondCounterHiRes();
 
+    auto body = buildRequestBody(request);
+    auto url = juce::URL(getEndpointUrl()).withPOSTData(body);
+    auto headers = getHeaders();
+
+    // Build header string for JUCE URL API
+    juce::String headerString;
+    for (auto& key : headers.getAllKeys())
+        headerString += key + ": " + headers[key] + "\r\n";
+
     int statusCode = 0;
-    auto result = url.readEntireTextStream (false, &statusCode);
+    auto options = juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                       .withExtraHeaders(headerString)
+                       .withStatusCode(&statusCode);
+
+    auto stream = url.createInputStream(options);
 
     response.wallSeconds = (juce::Time::getMillisecondCounterHiRes() - startTime) / 1000.0;
 
-    if (statusCode >= 200 && statusCode < 300 && result.isNotEmpty())
-    {
-        auto json = juce::JSON::parse (result);
-
-        if (json.isObject())
-        {
-            response.text = parseResponse (json);
-            response.success = response.text.isNotEmpty();
-        }
-        else
-        {
-            response.error = "Failed to parse JSON response";
-        }
-    }
-    else
-    {
-        response.error = "HTTP " + juce::String (statusCode) + ": " + result.substring (0, 200);
+    if (stream == nullptr) {
+        response.error = "Failed to connect to " + getEndpointUrl();
+        return response;
     }
 
+    auto responseText = stream->readEntireStreamAsString();
+
+    if (statusCode < 200 || statusCode >= 300) {
+        response.error = "HTTP " + juce::String(statusCode) + ": " + responseText.substring(0, 500);
+        return response;
+    }
+
+    response = parseResponseBody(responseText);
+    response.wallSeconds = (juce::Time::getMillisecondCounterHiRes() - startTime) / 1000.0;
     return response;
 }
 
-//==============================================================================
-void LLMClient::sendRequestAsync (const Request& request, ResponseCallback callback)
-{
-    // Capture what we need and run on a background thread
-    auto* client = this;
-    auto req = request;
-
-    juce::Thread::launch ([client, req, cb = std::move (callback)]()
-    {
-        auto response = client->sendRequest (req);
-
-        juce::MessageManager::callAsync ([cb, response]()
-        {
-            cb (response);
-        });
-    });
-}
-
-} // namespace llm
+}  // namespace llm

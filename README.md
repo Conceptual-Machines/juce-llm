@@ -1,5 +1,8 @@
 # juce-llm
 
+[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/Conceptual-Machines/juce-llm/main.svg)](https://results.pre-commit.ci/latest/github/Conceptual-Machines/juce-llm/main)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A JUCE module for LLM API integration. Provides a unified interface for text generation across multiple providers, using JUCE's native HTTP and JSON — zero external dependencies.
 
 ## Providers
@@ -25,21 +28,54 @@ config.model = "meta-llama/llama-3.3-70b-instruct";
 
 auto client = llm::LLMClientFactory::create (config);
 
-// Send a request (async)
+// Send a request (synchronous — call from any thread)
 llm::Request request;
 request.systemPrompt = "You are a helpful assistant.";
 request.userMessage = "Hello!";
 
-client->sendRequestAsync (request, [] (llm::Response response)
-{
-    if (response.success)
-        DBG (response.text);
-    else
-        DBG ("Error: " + response.error);
+auto response = client->sendRequest (request);
+
+if (response.success)
+    DBG (response.text);
+else
+    DBG ("Error: " + response.error);
+```
+
+### Structured output
+
+Use `Schema` to get JSON responses matching a defined structure:
+
+```cpp
+llm::Request request;
+request.systemPrompt = "Extract chord info from the user's request.";
+request.userMessage = "Give me a jazz progression in Bb";
+request.schema = llm::Schema::object ({
+    { "chords", llm::Schema::array (llm::Schema::string()) },
+    { "key",    llm::Schema::string() },
+    { "tempo",  llm::Schema::number() }
 });
 
-// Or synchronously (on a background thread)
 auto response = client->sendRequest (request);
+auto json = juce::JSON::parse (response.text);
+
+auto key = json["key"].toString();        // "Bb"
+auto chords = json["chords"].getArray();  // ["Bbmaj7", "Eb7", ...]
+```
+
+### Data interface
+
+For custom HTTP transport, use the data interface directly:
+
+```cpp
+auto client = llm::LLMClientFactory::create (config);
+
+auto body    = client->buildRequestBody (request);   // JSON string
+auto url     = client->getEndpointUrl();              // URL string
+auto headers = client->getHeaders();                  // StringPairArray
+
+// ... your HTTP transport ...
+
+auto response = client->parseResponseBody (jsonResponseString);
 ```
 
 ## Local llama-server

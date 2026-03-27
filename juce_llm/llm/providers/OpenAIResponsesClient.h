@@ -1,21 +1,20 @@
 #pragma once
 
-namespace llm
-{
+namespace llm {
 
 //==============================================================================
 /** OpenAI Responses API client — for GPT-5 and newer reasoning models. */
-class OpenAIResponsesClient : public LLMClient
-{
-public:
+class OpenAIResponsesClient : public LLMClient {
+  public:
     using LLMClient::LLMClient;
-    juce::String getName() const override { return "OpenAI Responses"; }
+    juce::String getName() const override {
+        return "OpenAI Responses";
+    }
 
-protected:
-    juce::var buildPayload (const Request& request) const override;
-    juce::URL buildUrl() const override;
-    juce::StringPairArray buildHeaders() const override;
-    juce::String parseResponse (const juce::var& json) const override;
+    juce::String buildRequestBody(const Request& request) const override;
+    juce::String getEndpointUrl() const override;
+    juce::StringPairArray getHeaders() const override;
+    Response parseResponseBody(const juce::String& jsonString) const override;
 };
 
-} // namespace llm
+}  // namespace llm

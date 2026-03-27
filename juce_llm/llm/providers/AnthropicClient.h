@@ -1,21 +1,20 @@
 #pragma once
 
-namespace llm
-{
+namespace llm {
 
 //==============================================================================
 /** Anthropic Messages API client — for Claude models. */
-class AnthropicClient : public LLMClient
-{
-public:
+class AnthropicClient : public LLMClient {
+  public:
     using LLMClient::LLMClient;
-    juce::String getName() const override { return "Anthropic"; }
+    juce::String getName() const override {
+        return "Anthropic";
+    }
 
-protected:
-    juce::var buildPayload (const Request& request) const override;
-    juce::URL buildUrl() const override;
-    juce::StringPairArray buildHeaders() const override;
-    juce::String parseResponse (const juce::var& json) const override;
+    juce::String buildRequestBody(const Request& request) const override;
+    juce::String getEndpointUrl() const override;
+    juce::StringPairArray getHeaders() const override;
+    Response parseResponseBody(const juce::String& jsonString) const override;
 };
 
-} // namespace llm
+}  // namespace llm
