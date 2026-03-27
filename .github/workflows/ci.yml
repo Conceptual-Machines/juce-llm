@@ -17,11 +17,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential cmake ninja-build \
+            build-essential cmake ninja-build pkg-config \
             libasound2-dev libcurl4-openssl-dev \
-            libfreetype-dev libx11-dev libxrandr-dev \
-            libxinerama-dev libxcursor-dev libxcomposite-dev \
-            mesa-common-dev
+            libfreetype6-dev libfreetype-dev \
+            libx11-dev libxrandr-dev libxinerama-dev \
+            libxcursor-dev libxcomposite-dev libxext-dev \
+            mesa-common-dev libglu1-mesa-dev \
+            libwebkit2gtk-4.1-dev
 
       - name: Clone JUCE
         run: |
