@@ -3,7 +3,7 @@
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/Conceptual-Machines/juce-llm/main.svg)](https://results.pre-commit.ci/latest/github/Conceptual-Machines/juce-llm/main)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A JUCE module for LLM API integration. Provides a unified interface for text generation across multiple providers, using JUCE's native HTTP and JSON — zero external dependencies.
+A JUCE module for LLM API integration. Provides a unified interface for text generation and structured output across multiple providers, using JUCE's native HTTP and JSON — zero external dependencies.
 
 ## Providers
 
