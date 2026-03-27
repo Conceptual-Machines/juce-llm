@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build \
+            libasound2-dev libcurl4-openssl-dev \
+            libfreetype-dev libx11-dev libxrandr-dev \
+            libxinerama-dev libxcursor-dev libxcomposite-dev \
+            mesa-common-dev
+
+      - name: Clone JUCE
+        run: |
+          git clone --depth 1 --branch 8.0.6 \
+            https://github.com/juce-framework/JUCE.git /tmp/JUCE
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DJUCE_PATH=/tmp/JUCE \
+            -DJUCE_LLM_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test (offline — payload building and response parsing)
+        run: ./build/juce_llm_test_artefacts/Release/juce_llm_test
+
+      - name: Test (cloud providers)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: ./build/juce_llm_test_artefacts/Release/juce_llm_test

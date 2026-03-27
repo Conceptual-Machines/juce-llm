@@ -20,11 +20,14 @@
 
 #include <juce_core/juce_core.h>
 
-#include "llm/LLMClient.h"
-#include "llm/LLMClientFactory.h"
+// clang-format off
+// Include order matters — types before client before providers
 #include "llm/LLMTypes.h"
 #include "llm/Schema.h"
-#include "llm/providers/AnthropicClient.h"
-#include "llm/providers/GeminiClient.h"
+#include "llm/LLMClient.h"
+#include "llm/LLMClientFactory.h"
 #include "llm/providers/OpenAIChatClient.h"
 #include "llm/providers/OpenAIResponsesClient.h"
+#include "llm/providers/AnthropicClient.h"
+#include "llm/providers/GeminiClient.h"
+// clang-format on
