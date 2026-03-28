@@ -31,10 +31,23 @@ class LLMClient {
     virtual Response parseResponseBody(const juce::String& jsonString) const = 0;
 
     //==============================================================================
+    // Data interface — streaming (optional override)
+
+    /** Build JSON payload with streaming enabled. Default adds "stream":true. */
+    virtual juce::String buildStreamingRequestBody(const Request& request) const;
+
+    /** Parse one SSE data line into a content token. Return empty if not a content chunk. */
+    virtual juce::String parseStreamChunk(const juce::String& dataLine) const;
+
+    //==============================================================================
     // HTTP transport
 
     /** Synchronous HTTP request. Call from any thread. */
-    Response sendRequest(const Request& request) const;
+    virtual Response sendRequest(const Request& request) const;
+
+    /** Streaming HTTP request. Calls onToken for each content chunk.
+        Returns the final accumulated Response. Call from any thread. */
+    virtual Response sendStreamingRequest(const Request& request, StreamCallback onToken) const;
 
     /** Access the config. */
     const ProviderConfig& getConfig() const {

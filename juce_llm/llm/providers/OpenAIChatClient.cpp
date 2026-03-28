@@ -18,8 +18,10 @@ juce::String OpenAIChatClient::buildRequestBody(const Request& request) const {
     payload->setProperty("messages", messagesArray);
     payload->setProperty("temperature", (double)request.temperature);
 
-    if (config_.grammar.isNotEmpty())
-        payload->setProperty("grammar", config_.grammar);
+    // GBNF grammar for llama-server (per-config or per-request)
+    auto grammar = config_.grammar.isNotEmpty() ? config_.grammar : request.grammar;
+    if (grammar.isNotEmpty())
+        payload->setProperty("grammar", grammar);
 
     // Structured output via JSON schema
     if (!request.schema.isVoid()) {
