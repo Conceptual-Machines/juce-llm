@@ -52,6 +52,12 @@ juce::String OpenAIResponsesClient::buildRequestBody(const Request& request) con
         payload->setProperty("text", juce::var(text));
     }
 
+    // Prompt caching — bucket by app+agent, retain for 24h
+    if (config_.userAgent.isNotEmpty()) {
+        payload->setProperty("prompt_cache_key", config_.userAgent);
+        payload->setProperty("prompt_cache_retention", "24h");
+    }
+
     return juce::JSON::toString(juce::var(payload), true);
 }
 

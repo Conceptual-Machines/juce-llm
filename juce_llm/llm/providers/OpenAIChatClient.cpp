@@ -16,7 +16,18 @@ juce::String OpenAIChatClient::buildRequestBody(const Request& request) const {
     auto* payload = new juce::DynamicObject();
     payload->setProperty("model", config_.model);
     payload->setProperty("messages", messagesArray);
-    payload->setProperty("temperature", (double)request.temperature);
+    if (!config_.noTemperature)
+        payload->setProperty("temperature", (double)request.temperature);
+
+    // Reasoning effort for GPT-5 / o-series (top-level field in Chat Completions)
+    if (config_.reasoningEffort.isNotEmpty())
+        payload->setProperty("reasoning_effort", config_.reasoningEffort);
+
+    // Prompt caching — bucket by app+agent, retain for 24h
+    if (config_.userAgent.isNotEmpty()) {
+        payload->setProperty("prompt_cache_key", config_.userAgent);
+        payload->setProperty("prompt_cache_retention", "24h");
+    }
 
     // GBNF grammar for llama-server (per-config or per-request)
     auto grammar = config_.grammar.isNotEmpty() ? config_.grammar : request.grammar;
@@ -48,6 +59,15 @@ juce::StringPairArray OpenAIChatClient::getHeaders() const {
     juce::StringPairArray headers;
     headers.set("Authorization", "Bearer " + config_.apiKey);
     headers.set("Content-Type", "application/json");
+
+    // OpenRouter-specific headers for app identification
+    if (config_.baseUrl.contains("openrouter.ai")) {
+        if (config_.userAgent.isNotEmpty())
+            headers.set("X-Title", config_.userAgent);
+        if (config_.appUrl.isNotEmpty())
+            headers.set("HTTP-Referer", config_.appUrl);
+    }
+
     return headers;
 }
 

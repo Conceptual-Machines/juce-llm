@@ -33,6 +33,9 @@ class LLMClient {
     //==============================================================================
     // Data interface — streaming (optional override)
 
+    /** Get the endpoint URL for streaming requests. Default returns getEndpointUrl(). */
+    virtual juce::String getStreamingEndpointUrl() const;
+
     /** Build JSON payload with streaming enabled. Default adds "stream":true. */
     virtual juce::String buildStreamingRequestBody(const Request& request) const;
 

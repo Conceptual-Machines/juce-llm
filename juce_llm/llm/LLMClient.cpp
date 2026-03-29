@@ -8,6 +8,10 @@ Response LLMClient::sendRequest(const Request& request) const {
     auto url = juce::URL(getEndpointUrl()).withPOSTData(body);
     auto headers = getHeaders();
 
+    // Inject User-Agent if configured
+    if (config_.userAgent.isNotEmpty() && !headers.containsKey("User-Agent"))
+        headers.set("User-Agent", config_.userAgent);
+
     // Build header string for JUCE URL API
     juce::String headerString;
     for (auto& key : headers.getAllKeys())
@@ -42,6 +46,11 @@ Response LLMClient::sendRequest(const Request& request) const {
     return response;
 }
 
+// Default streaming endpoint — same as non-streaming
+juce::String LLMClient::getStreamingEndpointUrl() const {
+    return getEndpointUrl();
+}
+
 // Default streaming body: inject "stream":true into the normal request body JSON
 juce::String LLMClient::buildStreamingRequestBody(const Request& request) const {
     auto body = buildRequestBody(request);
@@ -68,8 +77,12 @@ Response LLMClient::sendStreamingRequest(const Request& request, StreamCallback 
     auto startTime = juce::Time::getMillisecondCounterHiRes();
 
     auto body = buildStreamingRequestBody(request);
-    auto url = juce::URL(getEndpointUrl()).withPOSTData(body);
+    auto url = juce::URL(getStreamingEndpointUrl()).withPOSTData(body);
     auto headers = getHeaders();
+
+    // Inject User-Agent if configured
+    if (config_.userAgent.isNotEmpty() && !headers.containsKey("User-Agent"))
+        headers.set("User-Agent", config_.userAgent);
 
     juce::String headerString;
     for (auto& key : headers.getAllKeys())

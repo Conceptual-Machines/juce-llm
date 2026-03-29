@@ -27,6 +27,17 @@ juce::String GeminiClient::buildRequestBody(const Request& request) const {
     // Generation config
     auto* genConfig = new juce::DynamicObject();
     genConfig->setProperty("temperature", (double)request.temperature);
+    if (config_.maxTokens > 0)
+        genConfig->setProperty("maxOutputTokens", config_.maxTokens);
+
+    // Thinking config for Gemini 2.5 models
+    if (config_.reasoningEffort.isNotEmpty()) {
+        auto* thinkingConfig = new juce::DynamicObject();
+        thinkingConfig->setProperty("thinkingBudget", config_.reasoningEffort == "low"    ? 1024
+                                                       : config_.reasoningEffort == "high" ? 16384
+                                                                                           : 4096);
+        genConfig->setProperty("thinkingConfig", juce::var(thinkingConfig));
+    }
 
     // Structured output via JSON schema
     if (!request.schema.isVoid()) {
@@ -44,13 +55,13 @@ juce::String GeminiClient::buildRequestBody(const Request& request) const {
 }
 
 juce::String GeminiClient::getEndpointUrl() const {
-    return config_.baseUrl + "/v1beta/models/" + config_.model +
-           ":generateContent?key=" + config_.apiKey;
+    return config_.baseUrl + "/v1beta/models/" + config_.model + ":generateContent";
 }
 
 juce::StringPairArray GeminiClient::getHeaders() const {
     juce::StringPairArray headers;
     headers.set("Content-Type", "application/json");
+    headers.set("x-goog-api-key", config_.apiKey);
     return headers;
 }
 
@@ -73,6 +84,30 @@ Response GeminiClient::parseResponseBody(const juce::String& jsonString) const {
         response.error = "Failed to parse response: " + jsonString.substring(0, 200);
 
     return response;
+}
+
+juce::String GeminiClient::getStreamingEndpointUrl() const {
+    return config_.baseUrl + "/v1beta/models/" + config_.model +
+           ":streamGenerateContent?alt=sse";
+}
+
+// Gemini streaming body is the same as non-streaming (no "stream":true needed)
+juce::String GeminiClient::buildStreamingRequestBody(const Request& request) const {
+    return buildRequestBody(request);
+}
+
+// Gemini SSE chunks use the same candidates/parts structure as non-streaming
+juce::String GeminiClient::parseStreamChunk(const juce::String& dataLine) const {
+    auto json = juce::JSON::parse(dataLine);
+    if (auto* candidates = json["candidates"].getArray()) {
+        if (candidates->size() > 0) {
+            if (auto* parts = (*candidates)[0]["content"]["parts"].getArray()) {
+                if (parts->size() > 0)
+                    return (*parts)[0]["text"].toString();
+            }
+        }
+    }
+    return {};
 }
 
 }  // namespace llm

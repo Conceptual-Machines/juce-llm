@@ -10,13 +10,39 @@ juce::String AnthropicClient::buildRequestBody(const Request& request) const {
 
     auto* payload = new juce::DynamicObject();
     payload->setProperty("model", config_.model);
-    payload->setProperty("max_tokens", 1024);
+    payload->setProperty("max_tokens", config_.maxTokens > 0 ? config_.maxTokens : 4096);
     payload->setProperty("temperature", (double)request.temperature);
-    payload->setProperty("system", request.systemPrompt);
     payload->setProperty("messages", messagesArray);
 
-    // Anthropic doesn't have native JSON schema mode — inject schema into system prompt
-    // The caller can also use tool_use for structured output, but that's more advanced
+    // System prompt with prompt caching — cache the system prompt block
+    // since it's identical across calls for each agent
+    if (request.systemPrompt.isNotEmpty()) {
+        auto* sysBlock = new juce::DynamicObject();
+        sysBlock->setProperty("type", "text");
+        sysBlock->setProperty("text", request.systemPrompt);
+
+        auto* cacheControl = new juce::DynamicObject();
+        cacheControl->setProperty("type", "ephemeral");
+        sysBlock->setProperty("cache_control", juce::var(cacheControl));
+
+        juce::Array<juce::var> systemArray;
+        systemArray.add(juce::var(sysBlock));
+        payload->setProperty("system", systemArray);
+    }
+
+    // Output effort — low/medium/high/max (similar to OpenAI reasoning_effort)
+    if (config_.reasoningEffort.isNotEmpty()) {
+        auto* outputConfig = new juce::DynamicObject();
+        outputConfig->setProperty("effort", config_.reasoningEffort);
+        payload->setProperty("output_config", juce::var(outputConfig));
+    }
+
+    // App identification for abuse tracking
+    if (config_.userAgent.isNotEmpty()) {
+        auto* metadata = new juce::DynamicObject();
+        metadata->setProperty("user_id", config_.userAgent);
+        payload->setProperty("metadata", juce::var(metadata));
+    }
 
     return juce::JSON::toString(juce::var(payload), true);
 }
@@ -48,6 +74,16 @@ Response AnthropicClient::parseResponseBody(const juce::String& jsonString) cons
         response.error = "Failed to parse response: " + jsonString.substring(0, 200);
 
     return response;
+}
+
+// Anthropic SSE format:
+//   data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"token"}}
+juce::String AnthropicClient::parseStreamChunk(const juce::String& dataLine) const {
+    auto json = juce::JSON::parse(dataLine);
+    auto type = json["type"].toString();
+    if (type == "content_block_delta")
+        return json["delta"]["text"].toString();
+    return {};
 }
 
 }  // namespace llm
