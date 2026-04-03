@@ -78,6 +78,33 @@ auto headers = client->getHeaders();                  // StringPairArray
 auto response = client->parseResponseBody (jsonResponseString);
 ```
 
+### Codex compatibility mode
+
+`juce-llm` can also drive the ChatGPT Codex Responses backend through the `OpenAIResponses` client.
+
+Use `Provider::OpenAIResponses` together with `ProviderConfig::useCodexBackend = true`:
+
+```cpp
+llm::ProviderConfig config;
+config.provider = llm::Provider::OpenAIResponses;
+config.baseUrl = "https://chatgpt.com/backend-api/codex";
+config.apiKey = "<oauth access token>";
+config.model = "codex/gpt-5-codex";
+config.useCodexBackend = true;
+config.codexAccountId = "<chatgpt account id>";
+```
+
+When Codex mode is enabled, the client automatically:
+
+- appends `/responses` to the configured base URL when needed
+- strips the optional `codex/` model prefix before sending the request
+- sends Codex-specific headers such as `OpenAI-Beta`, `originator`, and `chatgpt-account-id`
+- uses the Codex-compatible `input` message-array payload shape
+- parses `response.output_text.delta` streaming events
+- omits prompt cache fields that are valid on the official Responses API but rejected by Codex
+
+This mode is intended for ChatGPT-authenticated Codex backends, not the standard OpenAI API.
+
 ## Local llama-server
 
 ```cpp
