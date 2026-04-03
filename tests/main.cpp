@@ -188,6 +188,58 @@ void testOpenAIResponsesParsing() {
     check("valid response success", response.success);
 }
 
+void testCodexResponsesPayload() {
+    printHeader("Codex Responses payload");
+
+    llm::ProviderConfig config;
+    config.provider = llm::Provider::OpenAIResponses;
+    config.baseUrl = "https://chatgpt.com/backend-api/codex";
+    config.apiKey = "test-token";
+    config.model = "codex/gpt-5-mini";
+    config.useCodexBackend = true;
+    config.codexAccountId = "acct_123";
+
+    auto client = llm::LLMClientFactory::create(config);
+
+    llm::Request request;
+    request.systemPrompt = "Be concise.";
+    request.userMessage = "Hi";
+
+    auto body = juce::JSON::parse(client->buildRequestBody(request));
+    check("strips codex prefix", body["model"].toString() == "gpt-5-mini");
+    check("instructions", body["instructions"].toString() == "Be concise.");
+    check("input array", body["input"].isArray() && body["input"].getArray()->size() == 1);
+    check("input role", (*body["input"].getArray())[0]["role"].toString() == "user");
+    check("store false", (bool)body["store"] == false);
+    check("endpoint", client->getEndpointUrl() == "https://chatgpt.com/backend-api/codex/responses");
+
+    auto headers = client->getHeaders();
+    check("beta header", headers["OpenAI-Beta"] == "responses=experimental");
+    check("account header", headers["chatgpt-account-id"] == "acct_123");
+}
+
+void testCodexResponsesStreamingParsing() {
+    printHeader("Codex Responses streaming parsing");
+
+    llm::ProviderConfig config;
+    config.provider = llm::Provider::OpenAIResponses;
+    config.baseUrl = "https://chatgpt.com/backend-api/codex";
+    config.model = "codex/gpt-5-mini";
+    config.useCodexBackend = true;
+
+    auto client = llm::LLMClientFactory::create(config);
+
+    auto token =
+        client->parseStreamChunk(R"({"type":"response.output_text.delta","delta":"Hello"})");
+    check("codex delta parsed", token == "Hello");
+
+    llm::Request request;
+    request.userMessage = "Hi";
+    auto streamBody = juce::JSON::parse(client->buildStreamingRequestBody(request));
+    check("stream true", (bool)streamBody["stream"] == true);
+    check("store false in stream", (bool)streamBody["store"] == false);
+}
+
 void testAnthropicPayload() {
     printHeader("Anthropic payload");
 
@@ -429,6 +481,8 @@ int main() {
     testOpenAIChatResponseParsing();
     testOpenAIResponsesPayload();
     testOpenAIResponsesParsing();
+    testCodexResponsesPayload();
+    testCodexResponsesStreamingParsing();
     testAnthropicPayload();
     testAnthropicParsing();
     testGeminiPayload();

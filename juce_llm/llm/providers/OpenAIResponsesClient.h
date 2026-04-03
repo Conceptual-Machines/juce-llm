@@ -15,6 +15,8 @@ class OpenAIResponsesClient : public LLMClient {
     juce::String getEndpointUrl() const override;
     juce::StringPairArray getHeaders() const override;
     Response parseResponseBody(const juce::String& jsonString) const override;
+    juce::String buildStreamingRequestBody(const Request& request) const override;
+    juce::String parseStreamChunk(const juce::String& dataLine) const override;
 };
 
 }  // namespace llm
