@@ -34,8 +34,8 @@ juce::String GeminiClient::buildRequestBody(const Request& request) const {
     if (config_.reasoningEffort.isNotEmpty()) {
         auto* thinkingConfig = new juce::DynamicObject();
         thinkingConfig->setProperty("thinkingBudget", config_.reasoningEffort == "low"    ? 1024
-                                                       : config_.reasoningEffort == "high" ? 16384
-                                                                                           : 4096);
+                                                      : config_.reasoningEffort == "high" ? 16384
+                                                                                          : 4096);
         genConfig->setProperty("thinkingConfig", juce::var(thinkingConfig));
     }
 
@@ -87,8 +87,7 @@ Response GeminiClient::parseResponseBody(const juce::String& jsonString) const {
 }
 
 juce::String GeminiClient::getStreamingEndpointUrl() const {
-    return config_.baseUrl + "/v1beta/models/" + config_.model +
-           ":streamGenerateContent?alt=sse";
+    return config_.baseUrl + "/v1beta/models/" + config_.model + ":streamGenerateContent?alt=sse";
 }
 
 // Gemini streaming body is the same as non-streaming (no "stream":true needed)

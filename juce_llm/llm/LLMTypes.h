@@ -17,7 +17,7 @@ struct ProviderConfig {
     juce::String apiKey;
     juce::String model;
 
-    int maxTokens = 4096;          // max output tokens (0 = provider default)
+    int maxTokens = 4096;  // max output tokens (0 = provider default)
 
     // Provider-specific options
     bool noTemperature = false;    // GPT-5 doesn't support temperature
@@ -28,8 +28,8 @@ struct ProviderConfig {
     juce::String codexAccountId;
 
     // Application identity — used for User-Agent and provider-specific headers
-    juce::String userAgent;        // e.g. "MAGDA/0.3.0"
-    juce::String appUrl;           // e.g. "https://magda.dev" (for OpenRouter HTTP-Referer)
+    juce::String userAgent;  // e.g. "MAGDA/0.3.0"
+    juce::String appUrl;     // e.g. "https://magda.dev" (for OpenRouter HTTP-Referer)
 };
 
 //==============================================================================

@@ -14,8 +14,8 @@ juce::String normalizeResponsesEndpoint(const juce::String& baseUrl) {
 
 juce::String OpenAIResponsesClient::buildRequestBody(const Request& request) const {
     auto* payload = new juce::DynamicObject();
-    payload->setProperty("model", config_.useCodexBackend ? stripCodexPrefix(config_.model)
-                                                          : config_.model);
+    payload->setProperty("model",
+                         config_.useCodexBackend ? stripCodexPrefix(config_.model) : config_.model);
 
     if (config_.useCodexBackend) {
         if (request.systemPrompt.isNotEmpty())

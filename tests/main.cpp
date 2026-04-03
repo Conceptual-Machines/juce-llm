@@ -211,7 +211,8 @@ void testCodexResponsesPayload() {
     check("input array", body["input"].isArray() && body["input"].getArray()->size() == 1);
     check("input role", (*body["input"].getArray())[0]["role"].toString() == "user");
     check("store false", (bool)body["store"] == false);
-    check("endpoint", client->getEndpointUrl() == "https://chatgpt.com/backend-api/codex/responses");
+    check("endpoint",
+          client->getEndpointUrl() == "https://chatgpt.com/backend-api/codex/responses");
 
     auto headers = client->getHeaders();
     check("beta header", headers["OpenAI-Beta"] == "responses=experimental");
