@@ -1,15 +1,13 @@
 #pragma once
 
-namespace llm
-{
+namespace llm {
 
 //==============================================================================
 /** Creates LLMClient instances from a ProviderConfig. */
-class LLMClientFactory
-{
-public:
+class LLMClientFactory {
+  public:
     /** Create a client for the given provider config. */
-    static std::unique_ptr<LLMClient> create (const ProviderConfig& config);
+    static std::unique_ptr<LLMClient> create(const ProviderConfig& config);
 };
 
-} // namespace llm
+}  // namespace llm
