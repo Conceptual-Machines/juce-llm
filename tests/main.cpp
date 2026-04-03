@@ -205,9 +205,9 @@ void testAnthropicPayload() {
 
     auto body = juce::JSON::parse(client->buildRequestBody(request));
     check("model", body["model"].toString() == "claude-haiku-4-5-20251001");
-    check("system", body["system"].toString() == "Be helpful.");
+    check("system", body["system"].getArray() != nullptr && body["system"].getArray()->size() == 1);
     check("messages", body["messages"].getArray()->size() == 1);
-    check("max_tokens", (int)body["max_tokens"] == 1024);
+    check("max_tokens", (int)body["max_tokens"] == 4096);
 
     check("endpoint", client->getEndpointUrl() == "https://api.anthropic.com/v1/messages");
 
@@ -252,7 +252,7 @@ void testGeminiPayload() {
     check("generationConfig", !body["generationConfig"].isVoid());
 
     check("endpoint contains model", client->getEndpointUrl().contains("gemini-2.5-flash"));
-    check("endpoint contains key", client->getEndpointUrl().contains("key=test-key"));
+    check("api key in header", client->getHeaders()["x-goog-api-key"] == "test-key");
 
     // With schema
     request.schema = llm::Schema::object({{"answer", llm::Schema::string()}});

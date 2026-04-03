@@ -21,9 +21,8 @@ Response LLMClient::sendRequest(const Request& request) const {
     auto options = juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
                        .withExtraHeaders(headerString)
                        .withStatusCode(&statusCode)
-                       .withConnectionTimeoutMs(config_.connectionTimeoutMs > 0
-                                                    ? config_.connectionTimeoutMs
-                                                    : 0);
+                       .withConnectionTimeoutMs(
+                           config_.connectionTimeoutMs > 0 ? config_.connectionTimeoutMs : 0);
 
     auto stream = url.createInputStream(options);
 
@@ -92,9 +91,8 @@ Response LLMClient::sendStreamingRequest(const Request& request, StreamCallback 
     auto options = juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
                        .withExtraHeaders(headerString)
                        .withStatusCode(&statusCode)
-                       .withConnectionTimeoutMs(config_.connectionTimeoutMs > 0
-                                                    ? config_.connectionTimeoutMs
-                                                    : 0);
+                       .withConnectionTimeoutMs(
+                           config_.connectionTimeoutMs > 0 ? config_.connectionTimeoutMs : 0);
 
     auto stream = url.createInputStream(options);
 
@@ -124,9 +122,9 @@ Response LLMClient::sendStreamingRequest(const Request& request, StreamCallback 
             break;
 
         if (c == '\n') {
-            auto line = juce::String::fromUTF8(rawLineBuffer.data(),
-                                                static_cast<int>(rawLineBuffer.size()))
-                            .trim();
+            auto line =
+                juce::String::fromUTF8(rawLineBuffer.data(), static_cast<int>(rawLineBuffer.size()))
+                    .trim();
             rawLineBuffer.clear();
 
             if (line.startsWith("data: ")) {
