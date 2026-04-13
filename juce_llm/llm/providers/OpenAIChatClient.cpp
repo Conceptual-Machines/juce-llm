@@ -34,6 +34,12 @@ juce::String OpenAIChatClient::buildRequestBody(const Request& request) const {
     if (grammar.isNotEmpty())
         payload->setProperty("grammar", grammar);
 
+    // Max output tokens — per-request override or provider config
+    // Use max_completion_tokens (required by newer OpenAI models like GPT-4o, o-series)
+    int maxTok = request.maxTokens > 0 ? request.maxTokens : config_.maxTokens;
+    if (maxTok > 0)
+        payload->setProperty("max_completion_tokens", maxTok);
+
     // Structured output via JSON schema
     if (!request.schema.isVoid()) {
         auto* schemaWrapper = new juce::DynamicObject();

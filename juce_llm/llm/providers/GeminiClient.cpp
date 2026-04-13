@@ -27,8 +27,9 @@ juce::String GeminiClient::buildRequestBody(const Request& request) const {
     // Generation config
     auto* genConfig = new juce::DynamicObject();
     genConfig->setProperty("temperature", (double)request.temperature);
-    if (config_.maxTokens > 0)
-        genConfig->setProperty("maxOutputTokens", config_.maxTokens);
+    int maxTok = request.maxTokens > 0 ? request.maxTokens : config_.maxTokens;
+    if (maxTok > 0)
+        genConfig->setProperty("maxOutputTokens", maxTok);
 
     // Thinking config for Gemini 2.5 models
     if (config_.reasoningEffort.isNotEmpty()) {

@@ -53,6 +53,9 @@ struct Request {
     /** Tool description for CFG grammar output. If empty, systemPrompt is used. */
     juce::String grammarToolDescription;
 
+    /** Override max output tokens for this request (0 = use provider config default). */
+    int maxTokens = 0;
+
     /** When true, sendStreamingRequest will add provider-specific streaming flags. */
     bool stream = false;
 };

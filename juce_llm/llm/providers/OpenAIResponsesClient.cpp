@@ -52,6 +52,11 @@ juce::String OpenAIResponsesClient::buildRequestBody(const Request& request) con
         payload->setProperty("text", juce::var(text));
     }
 
+    // Max output tokens — per-request override or provider config
+    int maxTok = request.maxTokens > 0 ? request.maxTokens : config_.maxTokens;
+    if (maxTok > 0)
+        payload->setProperty("max_output_tokens", maxTok);
+
     // Prompt caching — bucket by app+agent, retain for 24h
     if (config_.userAgent.isNotEmpty()) {
         payload->setProperty("prompt_cache_key", config_.userAgent);
