@@ -114,4 +114,17 @@ Response OpenAIResponsesClient::parseResponseBody(const juce::String& jsonString
     return response;
 }
 
+/** Responses API SSE chunks look like:
+      data: {"type":"response.output_text.delta","delta":"token","item_id":"..."}
+      data: {"type":"response.completed", ...}
+    The base LLMClient class only reads "data: " lines, so we just need to pull
+    the "delta" field out of the JSON when the event type matches. */
+juce::String OpenAIResponsesClient::parseStreamChunk(const juce::String& dataLine) const {
+    auto json = juce::JSON::parse(dataLine);
+    auto type = json["type"].toString();
+    if (type == "response.output_text.delta")
+        return json["delta"].toString();
+    return {};
+}
+
 }  // namespace llm

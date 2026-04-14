@@ -17,7 +17,7 @@ struct ProviderConfig {
     juce::String apiKey;
     juce::String model;
 
-    int maxTokens = 4096;  // max output tokens (0 = provider default)
+    int maxTokens = 0;  // max output tokens (0 = provider default — don't send a cap)
 
     // Provider-specific options
     bool noTemperature = false;    // GPT-5 doesn't support temperature
