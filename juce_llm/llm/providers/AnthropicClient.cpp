@@ -31,12 +31,9 @@ juce::String AnthropicClient::buildRequestBody(const Request& request) const {
         payload->setProperty("system", systemArray);
     }
 
-    // Output effort — low/medium/high/max (similar to OpenAI reasoning_effort)
-    if (config_.reasoningEffort.isNotEmpty()) {
-        auto* outputConfig = new juce::DynamicObject();
-        outputConfig->setProperty("effort", config_.reasoningEffort);
-        payload->setProperty("output_config", juce::var(outputConfig));
-    }
+    // NOTE: Anthropic's Messages API does not accept an `effort` / `output_config`
+    // field — that is an OpenAI-ism. `reasoningEffort` is deliberately ignored here.
+    // (Extended thinking uses a separate `thinking` block on models that support it.)
 
     // App identification for abuse tracking
     if (config_.userAgent.isNotEmpty()) {
