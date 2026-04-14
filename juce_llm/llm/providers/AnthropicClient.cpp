@@ -10,7 +10,8 @@ juce::String AnthropicClient::buildRequestBody(const Request& request) const {
 
     auto* payload = new juce::DynamicObject();
     payload->setProperty("model", config_.model);
-    int maxTok = request.maxTokens > 0 ? request.maxTokens : (config_.maxTokens > 0 ? config_.maxTokens : 4096);
+    int maxTok = request.maxTokens > 0 ? request.maxTokens
+                                       : (config_.maxTokens > 0 ? config_.maxTokens : 4096);
     payload->setProperty("max_tokens", maxTok);
     payload->setProperty("temperature", (double)request.temperature);
     payload->setProperty("messages", messagesArray);
