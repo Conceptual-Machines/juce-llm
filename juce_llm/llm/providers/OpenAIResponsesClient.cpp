@@ -38,16 +38,20 @@ juce::String OpenAIResponsesClient::buildRequestBody(const Request& request) con
         payload->setProperty("tools", tools);
         payload->setProperty("parallel_tool_calls", false);
     }
-    // Structured output via JSON schema
+    // Structured output via JSON schema. The Responses API flattens the
+    // json_schema fields into a single `format` object under `text`:
+    //   text.format.{type: "json_schema", name, strict, schema}
+    // — not the Chat Completions shape (text.{type, json_schema: {...}}),
+    // which the endpoint rejects with "Unknown parameter: text.type".
     else if (!request.schema.isVoid()) {
-        auto* schemaWrapper = new juce::DynamicObject();
-        schemaWrapper->setProperty("name", "response");
-        schemaWrapper->setProperty("strict", true);
-        schemaWrapper->setProperty("schema", request.schema);
+        auto* format = new juce::DynamicObject();
+        format->setProperty("type", "json_schema");
+        format->setProperty("name", "response");
+        format->setProperty("strict", true);
+        format->setProperty("schema", request.schema);
 
         auto* text = new juce::DynamicObject();
-        text->setProperty("type", "json_schema");
-        text->setProperty("json_schema", juce::var(schemaWrapper));
+        text->setProperty("format", juce::var(format));
 
         payload->setProperty("text", juce::var(text));
     }
