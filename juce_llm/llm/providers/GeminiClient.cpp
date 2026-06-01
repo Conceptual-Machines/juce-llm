@@ -11,7 +11,22 @@ juce::String GeminiClient::buildRequestBody(const Request& request) const {
     auto* sysInstruction = new juce::DynamicObject();
     sysInstruction->setProperty("parts", sysPartsArray);
 
-    // User content
+    auto contentsArray = juce::Array<juce::var>();
+
+    // Prior turns first; Gemini names the assistant role "model".
+    for (const auto& m : request.messages) {
+        auto* part = new juce::DynamicObject();
+        part->setProperty("text", m.content);
+        auto partsArray = juce::Array<juce::var>();
+        partsArray.add(juce::var(part));
+
+        auto* content = new juce::DynamicObject();
+        content->setProperty("role", m.role == "assistant" ? "model" : "user");
+        content->setProperty("parts", partsArray);
+        contentsArray.add(juce::var(content));
+    }
+
+    // Current user turn.
     auto* userPart = new juce::DynamicObject();
     userPart->setProperty("text", request.userMessage);
 
@@ -19,9 +34,8 @@ juce::String GeminiClient::buildRequestBody(const Request& request) const {
     userPartsArray.add(juce::var(userPart));
 
     auto* userContent = new juce::DynamicObject();
+    userContent->setProperty("role", "user");
     userContent->setProperty("parts", userPartsArray);
-
-    auto contentsArray = juce::Array<juce::var>();
     contentsArray.add(juce::var(userContent));
 
     // Generation config

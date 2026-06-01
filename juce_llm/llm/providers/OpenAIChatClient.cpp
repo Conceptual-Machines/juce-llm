@@ -8,6 +8,14 @@ juce::String OpenAIChatClient::buildRequestBody(const Request& request) const {
     sysMsg->setProperty("content", request.systemPrompt);
     messagesArray.add(juce::var(sysMsg));
 
+    // Prior turns between the system prompt and the current user turn.
+    for (const auto& m : request.messages) {
+        auto* turn = new juce::DynamicObject();
+        turn->setProperty("role", m.role);
+        turn->setProperty("content", m.content);
+        messagesArray.add(juce::var(turn));
+    }
+
     auto* userMsg = new juce::DynamicObject();
     userMsg->setProperty("role", "user");
     userMsg->setProperty("content", request.userMessage);

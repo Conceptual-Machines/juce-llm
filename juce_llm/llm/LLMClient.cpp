@@ -156,4 +156,42 @@ Response LLMClient::sendStreamingRequest(const Request& request, StreamCallback 
     return response;
 }
 
+//==============================================================================
+namespace {
+// Feed the conversation state into the outgoing request. Both fields are set;
+// each provider's buildRequestBody uses only the one its API supports
+// (messages[] for stateless providers, previousResponseId for Responses).
+void applyConversation(const Conversation& conv, Request& request) {
+    request.messages = conv.messages;
+    request.previousResponseId = conv.lastResponseId;
+}
+
+// Record a completed turn back into the conversation: the user prompt and the
+// assistant reply (kept for stateless replay + display), plus the response id
+// (used by the Responses API to chain the next turn).
+void recordTurn(Conversation& conv, const Request& request, const Response& response) {
+    conv.messages.push_back({"user", request.userMessage});
+    conv.messages.push_back({"assistant", response.text});
+    if (response.id.isNotEmpty())
+        conv.lastResponseId = response.id;
+}
+}  // namespace
+
+Response LLMClient::continueConversation(Conversation& conv, Request request) const {
+    applyConversation(conv, request);
+    auto response = sendRequest(request);
+    if (response.success)
+        recordTurn(conv, request, response);
+    return response;
+}
+
+Response LLMClient::continueConversationStreaming(Conversation& conv, Request request,
+                                                  StreamCallback onToken) const {
+    applyConversation(conv, request);
+    auto response = sendStreamingRequest(request, std::move(onToken));
+    if (response.success)
+        recordTurn(conv, request, response);
+    return response;
+}
+
 }  // namespace llm

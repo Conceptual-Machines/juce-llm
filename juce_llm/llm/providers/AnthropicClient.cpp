@@ -3,6 +3,14 @@ namespace llm {
 juce::String AnthropicClient::buildRequestBody(const Request& request) const {
     auto messagesArray = juce::Array<juce::var>();
 
+    // Prior turns first (empty = single-shot, identical to before).
+    for (const auto& m : request.messages) {
+        auto* turn = new juce::DynamicObject();
+        turn->setProperty("role", m.role);
+        turn->setProperty("content", m.content);
+        messagesArray.add(juce::var(turn));
+    }
+
     auto* userMsg = new juce::DynamicObject();
     userMsg->setProperty("role", "user");
     userMsg->setProperty("content", request.userMessage);
