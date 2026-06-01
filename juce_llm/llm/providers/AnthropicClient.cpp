@@ -21,7 +21,10 @@ juce::String AnthropicClient::buildRequestBody(const Request& request) const {
     int maxTok = request.maxTokens > 0 ? request.maxTokens
                                        : (config_.maxTokens > 0 ? config_.maxTokens : 4096);
     payload->setProperty("max_tokens", maxTok);
-    payload->setProperty("temperature", (double)request.temperature);
+    // Some newer models (e.g. Claude Opus 4.8) deprecated the temperature
+    // parameter and reject the request if it's present.
+    if (!config_.noTemperature)
+        payload->setProperty("temperature", (double)request.temperature);
     payload->setProperty("messages", messagesArray);
 
     // System prompt with prompt caching — cache the system prompt block
