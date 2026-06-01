@@ -6,6 +6,12 @@ juce::String OpenAIResponsesClient::buildRequestBody(const Request& request) con
     payload->setProperty("instructions", request.systemPrompt);
     payload->setProperty("input", request.userMessage);
 
+    // Stateful multi-turn: chain off the prior response so the server retains
+    // context (including reasoning items) instead of resending the history.
+    // Only userMessage is sent as the new input. First turn leaves this empty.
+    if (request.previousResponseId.isNotEmpty())
+        payload->setProperty("previous_response_id", request.previousResponseId);
+
     if (!config_.noTemperature)
         payload->setProperty("temperature", (double)request.temperature);
 
@@ -84,6 +90,10 @@ juce::StringPairArray OpenAIResponsesClient::getHeaders() const {
 Response OpenAIResponsesClient::parseResponseBody(const juce::String& jsonString) const {
     Response response;
     auto json = juce::JSON::parse(jsonString);
+
+    // Capture the response id up front so every return path can chain the next
+    // turn via previous_response_id.
+    response.id = json["id"].toString();
 
     if (auto* output = json["output"].getArray()) {
         for (const auto& item : *output) {

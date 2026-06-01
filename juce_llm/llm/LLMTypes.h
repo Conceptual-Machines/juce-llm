@@ -1,6 +1,15 @@
 #pragma once
 
+#include <vector>
+
 namespace llm {
+
+//==============================================================================
+/** A single prior conversation turn. role is "user" or "assistant". */
+struct Message {
+    juce::String role;
+    juce::String content;
+};
 
 //==============================================================================
 enum class Provider {
@@ -58,6 +67,18 @@ struct Request {
 
     /** When true, sendStreamingRequest will add provider-specific streaming flags. */
     bool stream = false;
+
+    /** Prior conversation turns for stateless providers (Anthropic / OpenAI Chat /
+        Gemini). Emitted before `userMessage`, which is the current user turn.
+        Empty = single-shot, identical to the original behaviour. Ignored by the
+        OpenAI Responses provider, which chains via `previousResponseId` instead. */
+    std::vector<Message> messages;
+
+    /** For the OpenAI Responses API only: the `id` of the previous response.
+        When set, the server retains prior context (including reasoning items),
+        so only `userMessage` is sent as the new input. Ignored by stateless
+        providers. */
+    juce::String previousResponseId;
 };
 
 //==============================================================================
@@ -66,6 +87,52 @@ struct Response {
     double wallSeconds = 0.0;
     bool success = false;
     juce::String error;
+
+    /** Provider response id. Used by the OpenAI Responses API to chain the next
+        turn (passed back as `previousResponseId`). Empty for providers that
+        don't expose one or where it isn't parsed. */
+    juce::String id;
+};
+
+//==============================================================================
+/** A running multi-turn conversation. Holds the turn history (for stateless
+    providers) and the last response id (for the stateful Responses API). The
+    client picks whichever the active provider needs; callers just keep one of
+    these and pass it to LLMClient::continueConversation. Serialise via
+    toVar / fromVar to persist it across UI rebuilds. */
+struct Conversation {
+    std::vector<Message> messages;  // alternating user / assistant turns
+    juce::String lastResponseId;    // OpenAI Responses chaining
+
+    void clear() {
+        messages.clear();
+        lastResponseId = {};
+    }
+
+    juce::var toVar() const {
+        auto* obj = new juce::DynamicObject();
+        juce::Array<juce::var> turns;
+        for (const auto& m : messages) {
+            auto* t = new juce::DynamicObject();
+            t->setProperty("role", m.role);
+            t->setProperty("content", m.content);
+            turns.add(juce::var(t));
+        }
+        obj->setProperty("messages", turns);
+        obj->setProperty("lastResponseId", lastResponseId);
+        return juce::var(obj);
+    }
+
+    static Conversation fromVar(const juce::var& v) {
+        Conversation c;
+        if (auto* obj = v.getDynamicObject()) {
+            if (auto* turns = obj->getProperty("messages").getArray())
+                for (const auto& t : *turns)
+                    c.messages.push_back({t["role"].toString(), t["content"].toString()});
+            c.lastResponseId = obj->getProperty("lastResponseId").toString();
+        }
+        return c;
+    }
 };
 
 //==============================================================================

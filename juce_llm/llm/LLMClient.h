@@ -52,6 +52,21 @@ class LLMClient {
         Returns the final accumulated Response. Call from any thread. */
     virtual Response sendStreamingRequest(const Request& request, StreamCallback onToken) const;
 
+    //==============================================================================
+    // Stateful multi-turn
+
+    /** Send one conversational turn. Fills the provider-appropriate fields from
+        `conv` (messages[] for stateless providers; previousResponseId for the
+        Responses API), sends `request` (whose userMessage is the new turn), and
+        on success appends the user + assistant turns to `conv` and stores the
+        response id. Provider differences are hidden here — callers keep a single
+        Conversation and call this each turn. Call from any thread. */
+    Response continueConversation(Conversation& conv, Request request) const;
+
+    /** Streaming variant of continueConversation. */
+    Response continueConversationStreaming(Conversation& conv, Request request,
+                                           StreamCallback onToken) const;
+
     /** Access the config. */
     const ProviderConfig& getConfig() const {
         return config_;
