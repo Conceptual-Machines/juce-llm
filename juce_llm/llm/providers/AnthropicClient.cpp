@@ -80,6 +80,13 @@ Response AnthropicClient::parseResponseBody(const juce::String& jsonString) cons
         }
     }
 
+    if (auto usage = json["usage"]; usage.isObject()) {
+        response.inputTokens = static_cast<int>(usage["input_tokens"]);
+        response.outputTokens = static_cast<int>(usage["output_tokens"]);
+        // Anthropic reports the two separately; total is their sum.
+        response.totalTokens = response.inputTokens + response.outputTokens;
+    }
+
     if (!response.success)
         response.error = "Failed to parse response: " + jsonString.substring(0, 200);
 

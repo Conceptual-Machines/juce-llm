@@ -96,6 +96,12 @@ Response OpenAIChatClient::parseResponseBody(const juce::String& jsonString) con
         }
     }
 
+    if (auto usage = json["usage"]; usage.isObject()) {
+        response.inputTokens = static_cast<int>(usage["prompt_tokens"]);
+        response.outputTokens = static_cast<int>(usage["completion_tokens"]);
+        response.totalTokens = static_cast<int>(usage["total_tokens"]);
+    }
+
     if (!response.success)
         response.error = "Failed to parse response: " + jsonString.substring(0, 200);
 

@@ -95,6 +95,12 @@ Response GeminiClient::parseResponseBody(const juce::String& jsonString) const {
         }
     }
 
+    if (auto usage = json["usageMetadata"]; usage.isObject()) {
+        response.inputTokens = static_cast<int>(usage["promptTokenCount"]);
+        response.outputTokens = static_cast<int>(usage["candidatesTokenCount"]);
+        response.totalTokens = static_cast<int>(usage["totalTokenCount"]);
+    }
+
     if (!response.success)
         response.error = "Failed to parse response: " + jsonString.substring(0, 200);
 

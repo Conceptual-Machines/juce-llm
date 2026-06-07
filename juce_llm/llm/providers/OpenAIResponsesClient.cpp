@@ -91,9 +91,14 @@ Response OpenAIResponsesClient::parseResponseBody(const juce::String& jsonString
     Response response;
     auto json = juce::JSON::parse(jsonString);
 
-    // Capture the response id up front so every return path can chain the next
-    // turn via previous_response_id.
+    // Capture the response id + usage up front so every return path carries
+    // them (the output loop has several early returns).
     response.id = json["id"].toString();
+    if (auto usage = json["usage"]; usage.isObject()) {
+        response.inputTokens = static_cast<int>(usage["input_tokens"]);
+        response.outputTokens = static_cast<int>(usage["output_tokens"]);
+        response.totalTokens = static_cast<int>(usage["total_tokens"]);
+    }
 
     if (auto* output = json["output"].getArray()) {
         for (const auto& item : *output) {

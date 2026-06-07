@@ -92,6 +92,14 @@ struct Response {
         turn (passed back as `previousResponseId`). Empty for providers that
         don't expose one or where it isn't parsed. */
     juce::String id;
+
+    /** Token usage reported by the provider, -1 when it wasn't reported (or
+        parsing failed). totalTokens is whatever the provider returned, or
+        input+output when it only reports the two. Useful for context-budget
+        and cost accounting. */
+    int inputTokens = -1;
+    int outputTokens = -1;
+    int totalTokens = -1;
 };
 
 //==============================================================================
