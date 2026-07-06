@@ -13,7 +13,7 @@ repos:
         args: ['--fix=lf']
 
   - repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v22.1.2
+    rev: v22.1.5
     hooks:
       - id: clang-format
         files: \.(cpp|hpp|h|c|cc|cxx)$
