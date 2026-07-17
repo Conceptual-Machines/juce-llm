@@ -43,9 +43,26 @@ juce::String AnthropicClient::buildRequestBody(const Request& request) const {
         payload->setProperty("system", systemArray);
     }
 
-    // NOTE: Anthropic's Messages API does not accept an `effort` / `output_config`
-    // field — that is an OpenAI-ism. `reasoningEffort` is deliberately ignored here.
-    // (Extended thinking uses a separate `thinking` block on models that support it.)
+    // Structured output. Anthropic honours `output_config.format` with a JSON
+    // schema (GA, no beta header) — the Anthropic analogue of the OpenAI
+    // `response_format` path. Set it whenever the caller supplied a schema so
+    // the model is constrained to schema-valid JSON, returned as its text
+    // block (so parseResponseBody needs no special handling). Unlike OpenAI's
+    // json_schema, no `name` field is required here.
+    if (!request.schema.isVoid()) {
+        auto* format = new juce::DynamicObject();
+        format->setProperty("type", "json_schema");
+        format->setProperty("schema", request.schema);
+
+        auto* outputConfig = new juce::DynamicObject();
+        outputConfig->setProperty("format", juce::var(format));
+        payload->setProperty("output_config", juce::var(outputConfig));
+    }
+
+    // NOTE: `output_config.effort` is an OpenAI-ism that Anthropic rejects, so
+    // reasoningEffort is deliberately ignored here. Only `output_config.format`
+    // (above) is emitted. Extended thinking uses a separate `thinking` block on
+    // models that support it.
 
     // App identification for abuse tracking
     if (config_.userAgent.isNotEmpty()) {
