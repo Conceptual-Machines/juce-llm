@@ -20,6 +20,7 @@ class GeminiClient : public LLMClient {
     juce::String getStreamingEndpointUrl() const override;
     juce::String buildStreamingRequestBody(const Request& request) const override;
     juce::String parseStreamChunk(const juce::String& dataLine) const override;
+    std::vector<StreamDelta> parseStreamDeltas(const juce::String& dataLine) const override;
 };
 
 }  // namespace llm

@@ -16,6 +16,7 @@ class OpenAIResponsesClient : public LLMClient {
     juce::StringPairArray getHeaders() const override;
     Response parseResponseBody(const juce::String& jsonString) const override;
     juce::String parseStreamChunk(const juce::String& dataLine) const override;
+    std::vector<StreamDelta> parseStreamDeltas(const juce::String& dataLine) const override;
 };
 
 }  // namespace llm

@@ -1,14 +1,97 @@
 #pragma once
 
+#include <algorithm>
+#include <functional>
+#include <utility>
 #include <vector>
 
 namespace llm {
 
 //==============================================================================
-/** A single prior conversation turn. role is "user" or "assistant". */
+/** An executable provider-neutral function definition. `annotations` is an
+    optional object for hints such as readOnlyHint/idempotentHint. Providers
+    that do not support annotations ignore it. */
+struct ToolDefinition {
+    ToolDefinition() = default;
+    ToolDefinition(juce::String nameIn, juce::String descriptionIn, juce::var inputSchemaIn,
+                   juce::var annotationsIn = {})
+        : name(std::move(nameIn)),
+          description(std::move(descriptionIn)),
+          inputSchema(std::move(inputSchemaIn)),
+          annotations(std::move(annotationsIn)) {}
+
+    juce::String name;
+    juce::String description;
+    juce::var inputSchema;
+    juce::var annotations;
+
+    juce::var toVar() const;
+    static ToolDefinition fromVar(const juce::var&);
+};
+
+/** One function call requested by an assistant response. `rawArguments`
+    preserves the exact streamed/provider payload. If it is malformed JSON,
+    `arguments` remains void and `error` describes the structured failure. */
+struct ToolCall {
+    juce::String id;
+    juce::String name;
+    juce::var arguments;
+    juce::String rawArguments;
+    juce::String error;
+    juce::var providerData;
+
+    bool isValid() const {
+        return error.isEmpty();
+    }
+
+    juce::var toVar() const;
+    static ToolCall fromVar(const juce::var&);
+};
+
+/** Result returned to the model for a prior tool call. `content` may be a
+    string, object, array, number, or boolean. */
+struct ToolResult {
+    ToolResult() = default;
+    ToolResult(juce::String callIdIn, juce::String nameIn, juce::var contentIn,
+               bool isErrorIn = false, juce::String errorIn = {})
+        : callId(std::move(callIdIn)),
+          name(std::move(nameIn)),
+          content(std::move(contentIn)),
+          isError(isErrorIn),
+          error(std::move(errorIn)) {}
+
+    juce::String callId;
+    juce::String name;
+    juce::var content;
+    bool isError = false;
+    juce::String error;
+
+    juce::var toVar() const;
+    static ToolResult fromVar(const juce::var&);
+};
+
+enum class ToolChoiceMode { Auto, None, Required, Specific };
+
+struct ToolChoice {
+    ToolChoiceMode mode = ToolChoiceMode::Auto;
+    juce::String toolName;
+};
+
+//==============================================================================
+/** A prior conversation turn. Assistant turns may contain text and/or tool
+    calls; tool turns contain one or more results. */
 struct Message {
+    Message() = default;
+    Message(juce::String roleIn, juce::String contentIn)
+        : role(std::move(roleIn)), content(std::move(contentIn)) {}
+
     juce::String role;
     juce::String content;
+    std::vector<ToolCall> toolCalls;
+    std::vector<ToolResult> toolResults;
+
+    juce::var toVar() const;
+    static Message fromVar(const juce::var&);
 };
 
 //==============================================================================
@@ -68,10 +151,15 @@ struct Request {
     /** When true, sendStreamingRequest will add provider-specific streaming flags. */
     bool stream = false;
 
+    /** Executable function tools. These are independent of `grammar`, which
+        remains constrained model output and is never surfaced as a ToolCall. */
+    std::vector<ToolDefinition> tools;
+    ToolChoice toolChoice;
+
     /** Prior conversation turns for stateless providers (Anthropic / OpenAI Chat /
         Gemini). Emitted before `userMessage`, which is the current user turn.
-        Empty = single-shot, identical to the original behaviour. Ignored by the
-        OpenAI Responses provider, which chains via `previousResponseId` instead. */
+        OpenAI Responses chains via `previousResponseId` and reads only pending
+        tool-result turns after the last assistant response. */
     std::vector<Message> messages;
 
     /** For the OpenAI Responses API only: the `id` of the previous response.
@@ -84,6 +172,7 @@ struct Request {
 //==============================================================================
 struct Response {
     juce::String text;
+    std::vector<ToolCall> toolCalls;
     double wallSeconds = 0.0;
     bool success = false;
     juce::String error;
@@ -109,7 +198,7 @@ struct Response {
     these and pass it to LLMClient::continueConversation. Serialise via
     toVar / fromVar to persist it across UI rebuilds. */
 struct Conversation {
-    std::vector<Message> messages;  // alternating user / assistant turns
+    std::vector<Message> messages;  // user / assistant / tool turns
     juce::String lastResponseId;    // OpenAI Responses chaining
 
     void clear() {
@@ -117,30 +206,9 @@ struct Conversation {
         lastResponseId = {};
     }
 
-    juce::var toVar() const {
-        auto* obj = new juce::DynamicObject();
-        juce::Array<juce::var> turns;
-        for (const auto& m : messages) {
-            auto* t = new juce::DynamicObject();
-            t->setProperty("role", m.role);
-            t->setProperty("content", m.content);
-            turns.add(juce::var(t));
-        }
-        obj->setProperty("messages", turns);
-        obj->setProperty("lastResponseId", lastResponseId);
-        return juce::var(obj);
-    }
-
-    static Conversation fromVar(const juce::var& v) {
-        Conversation c;
-        if (auto* obj = v.getDynamicObject()) {
-            if (auto* turns = obj->getProperty("messages").getArray())
-                for (const auto& t : *turns)
-                    c.messages.push_back({t["role"].toString(), t["content"].toString()});
-            c.lastResponseId = obj->getProperty("lastResponseId").toString();
-        }
-        return c;
-    }
+    void addToolResult(ToolResult result);
+    juce::var toVar() const;
+    static Conversation fromVar(const juce::var&);
 };
 
 //==============================================================================
@@ -148,5 +216,34 @@ using ResponseCallback = std::function<void(Response)>;
 
 /** Called for each token/chunk during streaming. Return false to cancel. */
 using StreamCallback = std::function<bool(const juce::String& token)>;
+
+enum class StreamDeltaType { Text, ToolCallStart, ToolCallArguments, ToolCallEnd };
+
+/** Provider-neutral streaming event. `toolCallIndex` correlates interleaved
+    parallel calls; argument fragments are concatenated in arrival order. */
+struct StreamDelta {
+    StreamDeltaType type = StreamDeltaType::Text;
+    int toolCallIndex = 0;
+    juce::String text;
+    juce::String callId;
+    juce::String toolName;
+    juce::String argumentsDelta;
+    juce::var providerData;
+};
+
+using StreamDeltaCallback = std::function<bool(const StreamDelta&)>;
+
+/** Stateful assembler used by the HTTP transport and exposed for deterministic
+    provider-stream fixture tests. */
+class StreamAccumulator {
+  public:
+    void add(const StreamDelta&);
+    Response finish() const;
+
+  private:
+    juce::String text_;
+    std::vector<int> toolCallIndices_;
+    std::vector<ToolCall> toolCalls_;
+};
 
 }  // namespace llm

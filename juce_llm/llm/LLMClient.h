@@ -42,6 +42,10 @@ class LLMClient {
     /** Parse one SSE data line into a content token. Return empty if not a content chunk. */
     virtual juce::String parseStreamChunk(const juce::String& dataLine) const;
 
+    /** Parse one SSE data line into provider-neutral text/tool deltas. The
+        default adapts parseStreamChunk(), preserving existing providers. */
+    virtual std::vector<StreamDelta> parseStreamDeltas(const juce::String& dataLine) const;
+
     //==============================================================================
     // HTTP transport
 
@@ -51,6 +55,11 @@ class LLMClient {
     /** Streaming HTTP request. Calls onToken for each content chunk.
         Returns the final accumulated Response. Call from any thread. */
     virtual Response sendStreamingRequest(const Request& request, StreamCallback onToken) const;
+
+    /** Detailed streaming variant for agent runtimes. The returned Response
+        contains fully assembled tool calls. */
+    virtual Response sendStreamingRequestDetailed(const Request& request,
+                                                  StreamDeltaCallback onDelta) const;
 
     //==============================================================================
     // Stateful multi-turn
@@ -66,6 +75,10 @@ class LLMClient {
     /** Streaming variant of continueConversation. */
     Response continueConversationStreaming(Conversation& conv, Request request,
                                            StreamCallback onToken) const;
+
+    /** Detailed streaming conversation variant that exposes tool-call deltas. */
+    Response continueConversationStreamingDetailed(Conversation& conv, Request request,
+                                                   StreamDeltaCallback onDelta) const;
 
     /** Access the config. */
     const ProviderConfig& getConfig() const {
