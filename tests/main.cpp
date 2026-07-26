@@ -302,6 +302,142 @@ void testFactory() {
           llm::LLMClientFactory::create(makeConfig(llm::Provider::Gemini))->getName() == "Gemini");
 }
 
+llm::ProviderConfig toolTestConfig(llm::Provider provider) {
+    llm::ProviderConfig config;
+    config.provider = provider;
+    config.baseUrl = provider == llm::Provider::Gemini ? "https://generativelanguage.googleapis.com"
+                                                       : "https://example.test/v1";
+    config.model = "test";
+    return config;
+}
+
+llm::ToolDefinition toolTestDefinition() {
+    llm::ToolDefinition tool;
+    tool.name = "get_weather";
+    tool.description = "Get weather for a city";
+    tool.inputSchema = llm::Schema::object({{"city", llm::Schema::string()}});
+    return tool;
+}
+
+void testToolCalls() {
+    printHeader("Provider-neutral tool calls");
+
+    auto definition = toolTestDefinition();
+    definition.annotations = juce::JSON::parse(R"({"readOnlyHint":true})");
+    auto restoredDefinition = llm::ToolDefinition::fromVar(definition.toVar());
+    check("tool definition annotations round-trip",
+          static_cast<bool>(restoredDefinition.annotations["readOnlyHint"]));
+
+    llm::ToolCall call;
+    call.id = "call-1";
+    call.name = "get_weather";
+    call.rawArguments = R"({"city":"London"})";
+    call.arguments = juce::JSON::parse(call.rawArguments);
+
+    llm::Conversation conversation;
+    llm::Message assistant("assistant", "Checking");
+    assistant.toolCalls.push_back(call);
+    conversation.messages.push_back(std::move(assistant));
+    conversation.addToolResult({"call-1", {}, juce::JSON::parse(R"({"temperature":18})")});
+    conversation.lastResponseId = "resp-1";
+
+    auto restored = llm::Conversation::fromVar(conversation.toVar());
+    check("conversation call round-trip",
+          restored.messages[0].toolCalls[0].arguments["city"].toString() == "London");
+    check("conversation resolves result name",
+          restored.messages[1].toolResults[0].name == "get_weather");
+    check("conversation response id round-trip", restored.lastResponseId == "resp-1");
+
+    {
+        auto client = llm::LLMClientFactory::create(toolTestConfig(llm::Provider::OpenAIChat));
+        llm::Request request;
+        request.tools = {toolTestDefinition()};
+        request.toolChoice = {llm::ToolChoiceMode::Specific, "get_weather"};
+        request.messages = restored.messages;
+        auto body = juce::JSON::parse(client->buildRequestBody(request));
+        check("OpenAI Chat tool definition",
+              body["tools"][0]["function"]["name"].toString() == "get_weather");
+        check("OpenAI Chat result mapping",
+              body["messages"][2]["tool_call_id"].toString() == "call-1");
+
+        auto response = client->parseResponseBody(
+            R"({"choices":[{"message":{"content":"","tool_calls":[{"id":"call-1","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"London\"}"}}]}}]})");
+        check("OpenAI Chat parses call", response.success && response.toolCalls.size() == 1);
+
+        llm::StreamAccumulator stream;
+        for (
+            const auto& chunk :
+            {juce::String(
+                 R"({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"get_weather","arguments":"{\"city\":"}}]}}]})"),
+             juce::String(
+                 R"({"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"London\"}"}}]}}]})")})
+            for (const auto& delta : client->parseStreamDeltas(chunk))
+                stream.add(delta);
+        response = stream.finish();
+        check("OpenAI Chat assembles streamed arguments",
+              response.toolCalls[0].arguments["city"].toString() == "London");
+    }
+
+    {
+        auto client = llm::LLMClientFactory::create(toolTestConfig(llm::Provider::OpenAIResponses));
+        llm::Request request;
+        request.grammar = "start: /.+/";
+        request.tools = {toolTestDefinition()};
+        auto body = juce::JSON::parse(client->buildRequestBody(request));
+        check("Responses keeps CFG custom tool distinct",
+              body["tools"][0]["type"].toString() == "custom" &&
+                  body["tools"][1]["type"].toString() == "function");
+
+        auto response = client->parseResponseBody(
+            R"({"id":"resp-1","output":[{"type":"custom_tool_call","input":"dsl text"},{"type":"function_call","call_id":"call-1","name":"get_weather","arguments":"{\"city\":\"London\"}"}]})");
+        check("Responses parses text and executable call",
+              response.text == "dsl text" && response.toolCalls.size() == 1);
+    }
+
+    {
+        auto client = llm::LLMClientFactory::create(toolTestConfig(llm::Provider::Anthropic));
+        llm::Request request;
+        request.tools = {toolTestDefinition()};
+        request.messages = restored.messages;
+        auto body = juce::JSON::parse(client->buildRequestBody(request));
+        check("Anthropic tool definition",
+              body["tools"][0]["input_schema"]["type"].toString() == "object");
+        check("Anthropic result block",
+              body["messages"][1]["content"][0]["type"].toString() == "tool_result");
+
+        auto response = client->parseResponseBody(
+            R"({"content":[{"type":"text","text":"Checking"},{"type":"tool_use","id":"call-1","name":"get_weather","input":{"city":"London"}}]})");
+        check("Anthropic parses mixed blocks",
+              response.text == "Checking" && response.toolCalls.size() == 1);
+    }
+
+    {
+        auto client = llm::LLMClientFactory::create(toolTestConfig(llm::Provider::Gemini));
+        llm::Request request;
+        request.tools = {toolTestDefinition()};
+        request.messages = restored.messages;
+        auto body = juce::JSON::parse(client->buildRequestBody(request));
+        check("Gemini function declaration",
+              body["tools"][0]["functionDeclarations"][0]["name"].toString() == "get_weather");
+        check("Gemini function response id",
+              body["contents"][1]["parts"][0]["functionResponse"]["id"].toString() == "call-1");
+
+        auto response = client->parseResponseBody(
+            R"({"responseId":"gem-resp","candidates":[{"content":{"parts":[{"functionCall":{"id":"call-1","name":"get_weather","args":{"city":"London"}},"thoughtSignature":"opaque"}]}}]})");
+        check("Gemini parses call id", response.toolCalls[0].id == "call-1");
+        check("Gemini preserves thought signature",
+              response.toolCalls[0].providerData["thoughtSignature"].toString() == "opaque");
+    }
+
+    llm::StreamAccumulator malformed;
+    malformed.add({llm::StreamDeltaType::ToolCallStart, 0, {}, "bad", "broken", {}, {}});
+    malformed.add({llm::StreamDeltaType::ToolCallArguments, 0, {}, {}, {}, "{bad", {}});
+    auto malformedResponse = malformed.finish();
+    check("malformed arguments are structured failure",
+          malformedResponse.success && !malformedResponse.toolCalls[0].isValid() &&
+              malformedResponse.text.isEmpty());
+}
+
 //==============================================================================
 // Live tests — require API keys
 //==============================================================================
@@ -433,6 +569,7 @@ int main() {
     testAnthropicParsing();
     testGeminiPayload();
     testGeminiParsing();
+    testToolCalls();
 
     // Live tests (skip if no keys)
     testLiveProviders();

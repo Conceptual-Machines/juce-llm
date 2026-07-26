@@ -1,10 +1,65 @@
 namespace llm {
+namespace openAIResponsesDetail {
+juce::String resultContent(const ToolResult& result) {
+    if (result.content.isString())
+        return result.content.toString();
+    if (!result.content.isVoid())
+        return juce::JSON::toString(result.content);
+    return result.error;
+}
+
+ToolCall parseCall(const juce::var& value) {
+    ToolCall call;
+    call.id = value["call_id"].toString();
+    call.name = value["name"].toString();
+    call.rawArguments = value["arguments"].toString();
+    if (call.rawArguments.isEmpty())
+        call.rawArguments = "{}";
+    call.arguments = juce::JSON::parse(call.rawArguments);
+    if (call.arguments.isVoid())
+        call.error = "Malformed tool arguments: " + call.rawArguments.substring(0, 200);
+    return call;
+}
+}  // namespace openAIResponsesDetail
 
 juce::String OpenAIResponsesClient::buildRequestBody(const Request& request) const {
     auto* payload = new juce::DynamicObject();
     payload->setProperty("model", config_.model);
     payload->setProperty("instructions", request.systemPrompt);
-    payload->setProperty("input", request.userMessage);
+
+    juce::Array<juce::var> pendingInput;
+    auto lastAssistant = request.messages.rend();
+    for (auto it = request.messages.rbegin(); it != request.messages.rend(); ++it) {
+        if (it->role == "assistant") {
+            lastAssistant = it;
+            break;
+        }
+    }
+    if (lastAssistant != request.messages.rend()) {
+        for (auto it = lastAssistant.base(); it != request.messages.end(); ++it) {
+            if (it->role != "tool")
+                continue;
+            for (const auto& result : it->toolResults) {
+                auto* output = new juce::DynamicObject();
+                output->setProperty("type", "function_call_output");
+                output->setProperty("call_id", result.callId);
+                output->setProperty("output", openAIResponsesDetail::resultContent(result));
+                pendingInput.add(juce::var(output));
+            }
+        }
+    }
+
+    if (!pendingInput.isEmpty()) {
+        if (request.userMessage.isNotEmpty()) {
+            auto* user = new juce::DynamicObject();
+            user->setProperty("role", "user");
+            user->setProperty("content", request.userMessage);
+            pendingInput.add(juce::var(user));
+        }
+        payload->setProperty("input", pendingInput);
+    } else {
+        payload->setProperty("input", request.userMessage);
+    }
 
     // Stateful multi-turn: chain off the prior response so the server retains
     // context (including reasoning items) instead of resending the history.
@@ -21,7 +76,10 @@ juce::String OpenAIResponsesClient::buildRequestBody(const Request& request) con
         payload->setProperty("reasoning", juce::var(reasoning));
     }
 
-    // CFG grammar-constrained output via custom tool
+    juce::Array<juce::var> tools;
+
+    // CFG grammar-constrained output via custom tool. This remains a custom
+    // output channel and is intentionally distinct from executable functions.
     if (request.grammar.isNotEmpty()) {
         auto toolName = request.grammarToolName.isNotEmpty() ? request.grammarToolName
                                                              : juce::String("grammar_tool");
@@ -39,9 +97,7 @@ juce::String OpenAIResponsesClient::buildRequestBody(const Request& request) con
         format->setProperty("definition", request.grammar);
         tool->setProperty("format", juce::var(format));
 
-        juce::Array<juce::var> tools;
         tools.add(juce::var(tool));
-        payload->setProperty("tools", tools);
         payload->setProperty("parallel_tool_calls", false);
     }
     // Structured output via JSON schema. The Responses API flattens the
@@ -60,6 +116,39 @@ juce::String OpenAIResponsesClient::buildRequestBody(const Request& request) con
         text->setProperty("format", juce::var(format));
 
         payload->setProperty("text", juce::var(text));
+    }
+
+    for (const auto& definition : request.tools) {
+        auto* tool = new juce::DynamicObject();
+        tool->setProperty("type", "function");
+        tool->setProperty("name", definition.name);
+        tool->setProperty("description", definition.description);
+        tool->setProperty("parameters", definition.inputSchema);
+        tool->setProperty("strict", true);
+        tools.add(juce::var(tool));
+    }
+    if (!tools.isEmpty())
+        payload->setProperty("tools", tools);
+
+    if (!request.tools.empty()) {
+        switch (request.toolChoice.mode) {
+            case ToolChoiceMode::None:
+                payload->setProperty("tool_choice", "none");
+                break;
+            case ToolChoiceMode::Required:
+                payload->setProperty("tool_choice", "required");
+                break;
+            case ToolChoiceMode::Specific: {
+                auto* choice = new juce::DynamicObject();
+                choice->setProperty("type", "function");
+                choice->setProperty("name", request.toolChoice.toolName);
+                payload->setProperty("tool_choice", juce::var(choice));
+                break;
+            }
+            case ToolChoiceMode::Auto:
+                payload->setProperty("tool_choice", "auto");
+                break;
+        }
     }
 
     // Max output tokens — per-request override or provider config
@@ -108,20 +197,19 @@ Response OpenAIResponsesClient::parseResponseBody(const juce::String& jsonString
             if (type == "custom_tool_call") {
                 auto input = item["input"].toString().trim();
                 if (input.isNotEmpty()) {
-                    response.text = input;
-                    response.success = true;
-                    return response;
+                    response.text += input;
                 }
             }
+
+            if (type == "function_call")
+                response.toolCalls.push_back(openAIResponsesDetail::parseCall(item));
 
             // Standard text response — output[].content[].text
             if (type == "message") {
                 if (auto* content = item["content"].getArray()) {
                     for (const auto& c : *content) {
                         if (c["type"].toString() == "output_text") {
-                            response.text = c["text"].toString().trim();
-                            response.success = response.text.isNotEmpty();
-                            return response;
+                            response.text += c["text"].toString();
                         }
                     }
                 }
@@ -129,7 +217,10 @@ Response OpenAIResponsesClient::parseResponseBody(const juce::String& jsonString
         }
     }
 
-    response.error = "Failed to parse response: " + jsonString.substring(0, 200);
+    response.text = response.text.trim();
+    response.success = response.text.isNotEmpty() || !response.toolCalls.empty();
+    if (!response.success)
+        response.error = "Failed to parse response: " + jsonString.substring(0, 200);
     return response;
 }
 
@@ -144,6 +235,40 @@ juce::String OpenAIResponsesClient::parseStreamChunk(const juce::String& dataLin
     if (type == "response.output_text.delta")
         return json["delta"].toString();
     return {};
+}
+
+std::vector<StreamDelta> OpenAIResponsesClient::parseStreamDeltas(
+    const juce::String& dataLine) const {
+    std::vector<StreamDelta> result;
+    auto json = juce::JSON::parse(dataLine);
+    const auto type = json["type"].toString();
+
+    if (type == "response.output_text.delta") {
+        StreamDelta delta;
+        delta.type = StreamDeltaType::Text;
+        delta.text = json["delta"].toString();
+        result.push_back(std::move(delta));
+    } else if (type == "response.output_item.added" &&
+               json["item"]["type"].toString() == "function_call") {
+        StreamDelta delta;
+        delta.type = StreamDeltaType::ToolCallStart;
+        delta.toolCallIndex = static_cast<int>(json["output_index"]);
+        delta.callId = json["item"]["call_id"].toString();
+        delta.toolName = json["item"]["name"].toString();
+        result.push_back(std::move(delta));
+    } else if (type == "response.function_call_arguments.delta") {
+        StreamDelta delta;
+        delta.type = StreamDeltaType::ToolCallArguments;
+        delta.toolCallIndex = static_cast<int>(json["output_index"]);
+        delta.argumentsDelta = json["delta"].toString();
+        result.push_back(std::move(delta));
+    } else if (type == "response.function_call_arguments.done") {
+        StreamDelta delta;
+        delta.type = StreamDeltaType::ToolCallEnd;
+        delta.toolCallIndex = static_cast<int>(json["output_index"]);
+        result.push_back(std::move(delta));
+    }
+    return result;
 }
 
 }  // namespace llm

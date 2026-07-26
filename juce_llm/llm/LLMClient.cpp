@@ -71,7 +71,27 @@ juce::String LLMClient::parseStreamChunk(const juce::String& dataLine) const {
     return {};
 }
 
+std::vector<StreamDelta> LLMClient::parseStreamDeltas(const juce::String& dataLine) const {
+    auto token = parseStreamChunk(dataLine);
+    if (token.isEmpty())
+        return {};
+    StreamDelta delta;
+    delta.type = StreamDeltaType::Text;
+    delta.text = token;
+    return {delta};
+}
+
 Response LLMClient::sendStreamingRequest(const Request& request, StreamCallback onToken) const {
+    return sendStreamingRequestDetailed(request,
+                                        [callback = std::move(onToken)](const StreamDelta& delta) {
+                                            if (delta.type != StreamDeltaType::Text || !callback)
+                                                return true;
+                                            return callback(delta.text);
+                                        });
+}
+
+Response LLMClient::sendStreamingRequestDetailed(const Request& request,
+                                                 StreamDeltaCallback onDelta) const {
     Response response;
     auto startTime = juce::Time::getMillisecondCounterHiRes();
 
@@ -110,7 +130,7 @@ Response LLMClient::sendStreamingRequest(const Request& request, StreamCallback 
     }
 
     // Read SSE stream line by line
-    juce::String accumulated;
+    StreamAccumulator accumulator;
     bool cancelled = false;
 
     // Read into a byte buffer, convert complete lines as UTF-8
@@ -132,11 +152,12 @@ Response LLMClient::sendStreamingRequest(const Request& request, StreamCallback 
                 if (data == "[DONE]")
                     break;
 
-                auto token = parseStreamChunk(data);
-                if (token.isNotEmpty()) {
-                    accumulated += token;
-                    if (onToken && !onToken(token))
+                for (const auto& delta : parseStreamDeltas(data)) {
+                    accumulator.add(delta);
+                    if (onDelta && !onDelta(delta)) {
                         cancelled = true;
+                        break;
+                    }
                 }
             }
         } else {
@@ -144,8 +165,7 @@ Response LLMClient::sendStreamingRequest(const Request& request, StreamCallback 
         }
     }
 
-    response.text = accumulated.trim();
-    response.success = response.text.isNotEmpty();
+    response = accumulator.finish();
     response.wallSeconds = (juce::Time::getMillisecondCounterHiRes() - startTime) / 1000.0;
 
     if (cancelled) {
@@ -170,8 +190,13 @@ void applyConversation(const Conversation& conv, Request& request) {
 // assistant reply (kept for stateless replay + display), plus the response id
 // (used by the Responses API to chain the next turn).
 void recordTurn(Conversation& conv, const Request& request, const Response& response) {
-    conv.messages.push_back({"user", request.userMessage});
-    conv.messages.push_back({"assistant", response.text});
+    if (request.userMessage.isNotEmpty())
+        conv.messages.push_back({"user", request.userMessage});
+    Message assistant;
+    assistant.role = "assistant";
+    assistant.content = response.text;
+    assistant.toolCalls = response.toolCalls;
+    conv.messages.push_back(std::move(assistant));
     if (response.id.isNotEmpty())
         conv.lastResponseId = response.id;
 }
@@ -189,6 +214,15 @@ Response LLMClient::continueConversationStreaming(Conversation& conv, Request re
                                                   StreamCallback onToken) const {
     applyConversation(conv, request);
     auto response = sendStreamingRequest(request, std::move(onToken));
+    if (response.success)
+        recordTurn(conv, request, response);
+    return response;
+}
+
+Response LLMClient::continueConversationStreamingDetailed(Conversation& conv, Request request,
+                                                          StreamDeltaCallback onDelta) const {
+    applyConversation(conv, request);
+    auto response = sendStreamingRequestDetailed(request, std::move(onDelta));
     if (response.success)
         recordTurn(conv, request, response);
     return response;

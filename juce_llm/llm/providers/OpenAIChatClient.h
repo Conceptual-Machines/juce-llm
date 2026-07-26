@@ -18,6 +18,7 @@ class OpenAIChatClient : public LLMClient {
     juce::String getEndpointUrl() const override;
     juce::StringPairArray getHeaders() const override;
     Response parseResponseBody(const juce::String& jsonString) const override;
+    std::vector<StreamDelta> parseStreamDeltas(const juce::String& dataLine) const override;
 };
 
 }  // namespace llm

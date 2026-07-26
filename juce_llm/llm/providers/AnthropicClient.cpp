@@ -1,4 +1,13 @@
 namespace llm {
+namespace anthropicDetail {
+juce::String resultContent(const ToolResult& result) {
+    if (result.content.isString())
+        return result.content.toString();
+    if (!result.content.isVoid())
+        return juce::JSON::toString(result.content);
+    return result.error;
+}
+}  // namespace anthropicDetail
 
 juce::String AnthropicClient::buildRequestBody(const Request& request) const {
     auto messagesArray = juce::Array<juce::var>();
@@ -6,15 +15,48 @@ juce::String AnthropicClient::buildRequestBody(const Request& request) const {
     // Prior turns first (empty = single-shot, identical to before).
     for (const auto& m : request.messages) {
         auto* turn = new juce::DynamicObject();
-        turn->setProperty("role", m.role);
-        turn->setProperty("content", m.content);
+        turn->setProperty("role", m.role == "tool" ? "user" : m.role);
+
+        if (m.role == "tool") {
+            juce::Array<juce::var> blocks;
+            for (const auto& result : m.toolResults) {
+                auto* block = new juce::DynamicObject();
+                block->setProperty("type", "tool_result");
+                block->setProperty("tool_use_id", result.callId);
+                block->setProperty("content", anthropicDetail::resultContent(result));
+                block->setProperty("is_error", result.isError || result.error.isNotEmpty());
+                blocks.add(juce::var(block));
+            }
+            turn->setProperty("content", blocks);
+        } else if (m.role == "assistant" && !m.toolCalls.empty()) {
+            juce::Array<juce::var> blocks;
+            if (m.content.isNotEmpty()) {
+                auto* text = new juce::DynamicObject();
+                text->setProperty("type", "text");
+                text->setProperty("text", m.content);
+                blocks.add(juce::var(text));
+            }
+            for (const auto& call : m.toolCalls) {
+                auto* block = new juce::DynamicObject();
+                block->setProperty("type", "tool_use");
+                block->setProperty("id", call.id);
+                block->setProperty("name", call.name);
+                block->setProperty("input", call.arguments);
+                blocks.add(juce::var(block));
+            }
+            turn->setProperty("content", blocks);
+        } else {
+            turn->setProperty("content", m.content);
+        }
         messagesArray.add(juce::var(turn));
     }
 
-    auto* userMsg = new juce::DynamicObject();
-    userMsg->setProperty("role", "user");
-    userMsg->setProperty("content", request.userMessage);
-    messagesArray.add(juce::var(userMsg));
+    if (request.userMessage.isNotEmpty()) {
+        auto* userMsg = new juce::DynamicObject();
+        userMsg->setProperty("role", "user");
+        userMsg->setProperty("content", request.userMessage);
+        messagesArray.add(juce::var(userMsg));
+    }
 
     auto* payload = new juce::DynamicObject();
     payload->setProperty("model", config_.model);
@@ -59,6 +101,36 @@ juce::String AnthropicClient::buildRequestBody(const Request& request) const {
         payload->setProperty("output_config", juce::var(outputConfig));
     }
 
+    if (!request.tools.empty()) {
+        juce::Array<juce::var> tools;
+        for (const auto& definition : request.tools) {
+            auto* tool = new juce::DynamicObject();
+            tool->setProperty("name", definition.name);
+            tool->setProperty("description", definition.description);
+            tool->setProperty("input_schema", definition.inputSchema);
+            tools.add(juce::var(tool));
+        }
+        payload->setProperty("tools", tools);
+
+        auto* choice = new juce::DynamicObject();
+        switch (request.toolChoice.mode) {
+            case ToolChoiceMode::None:
+                choice->setProperty("type", "none");
+                break;
+            case ToolChoiceMode::Required:
+                choice->setProperty("type", "any");
+                break;
+            case ToolChoiceMode::Specific:
+                choice->setProperty("type", "tool");
+                choice->setProperty("name", request.toolChoice.toolName);
+                break;
+            case ToolChoiceMode::Auto:
+                choice->setProperty("type", "auto");
+                break;
+        }
+        payload->setProperty("tool_choice", juce::var(choice));
+    }
+
     // NOTE: `output_config.effort` is an OpenAI-ism that Anthropic rejects, so
     // reasoningEffort is deliberately ignored here. Only `output_config.format`
     // (above) is emitted. Extended thinking uses a separate `thinking` block on
@@ -91,11 +163,22 @@ Response AnthropicClient::parseResponseBody(const juce::String& jsonString) cons
     auto json = juce::JSON::parse(jsonString);
 
     if (auto* content = json["content"].getArray()) {
-        if (content->size() > 0) {
-            response.text = (*content)[0]["text"].toString().trim();
-            response.success = response.text.isNotEmpty();
+        for (const auto& block : *content) {
+            const auto type = block["type"].toString();
+            if (type == "text")
+                response.text += block["text"].toString();
+            else if (type == "tool_use") {
+                ToolCall call;
+                call.id = block["id"].toString();
+                call.name = block["name"].toString();
+                call.arguments = block["input"];
+                call.rawArguments = juce::JSON::toString(call.arguments);
+                response.toolCalls.push_back(std::move(call));
+            }
         }
     }
+    response.text = response.text.trim();
+    response.success = response.text.isNotEmpty() || !response.toolCalls.empty();
 
     if (auto usage = json["usage"]; usage.isObject()) {
         response.inputTokens = static_cast<int>(usage["input_tokens"]);
@@ -118,6 +201,36 @@ juce::String AnthropicClient::parseStreamChunk(const juce::String& dataLine) con
     if (type == "content_block_delta")
         return json["delta"]["text"].toString();
     return {};
+}
+
+std::vector<StreamDelta> AnthropicClient::parseStreamDeltas(const juce::String& dataLine) const {
+    std::vector<StreamDelta> result;
+    auto json = juce::JSON::parse(dataLine);
+    const auto type = json["type"].toString();
+    const int index = static_cast<int>(json["index"]);
+
+    if (type == "content_block_start" && json["content_block"]["type"].toString() == "tool_use") {
+        StreamDelta delta;
+        delta.type = StreamDeltaType::ToolCallStart;
+        delta.toolCallIndex = index;
+        delta.callId = json["content_block"]["id"].toString();
+        delta.toolName = json["content_block"]["name"].toString();
+        result.push_back(std::move(delta));
+    } else if (type == "content_block_delta") {
+        const auto deltaType = json["delta"]["type"].toString();
+        StreamDelta delta;
+        delta.toolCallIndex = index;
+        if (deltaType == "text_delta") {
+            delta.type = StreamDeltaType::Text;
+            delta.text = json["delta"]["text"].toString();
+            result.push_back(std::move(delta));
+        } else if (deltaType == "input_json_delta") {
+            delta.type = StreamDeltaType::ToolCallArguments;
+            delta.argumentsDelta = json["delta"]["partial_json"].toString();
+            result.push_back(std::move(delta));
+        }
+    }
+    return result;
 }
 
 }  // namespace llm
