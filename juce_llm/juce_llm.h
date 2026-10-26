@@ -3,7 +3,7 @@
 
   ID:               juce_llm
   vendor:           Conceptual Machines
-  version:          0.4.0
+  version:          0.5.0
   name:             LLM Client
   description:      Unified LLM API client for JUCE — text generation and structured
                     output across OpenAI, Anthropic, Gemini, OpenRouter, and llama-server.
@@ -26,6 +26,7 @@
 #include "llm/Schema.h"
 #include "llm/LLMClient.h"
 #include "llm/LLMClientFactory.h"
+#include "llm/Models.h"
 #include "llm/providers/OpenAIChatClient.h"
 #include "llm/providers/OpenAIResponsesClient.h"
 #include "llm/providers/AnthropicClient.h"

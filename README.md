@@ -16,6 +16,30 @@ and JSON — zero external dependencies.
 | **Anthropic Messages** | Claude models | |
 | **Gemini native** | Gemini models | `generateContent` endpoint |
 
+## Models
+
+`llm::modelCatalog()` lists the hosted models the library knows (Anthropic,
+OpenAI, Google, DeepSeek), each with its wire API, tier and temperature gate.
+`llm::makeConfig` turns an entry into a ready `ProviderConfig`:
+
+```cpp
+auto& model = llm::defaultModel (llm::Vendor::Anthropic);            // Claude Sonnet 5.5
+auto client = llm::LLMClientFactory::create (llm::makeConfig (model, apiKey));
+
+for (auto& m : llm::modelsFor (llm::Vendor::OpenAI))                 // current models only
+    picker.addItem (m.label, ...);
+```
+
+| Vendor | Current models |
+|---|---|
+| Anthropic | `claude-fable-5-1`, `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5` |
+| OpenAI | `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6.1-terra`, `gpt-6-luna` |
+| Google | `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.5-flash-lite` |
+| DeepSeek | `deepseek-v4-pro`, `deepseek-v4-flash` |
+
+Superseded models stay in the catalog flagged `legacy`. OpenRouter and local
+servers take free-text ids: build their `ProviderConfig` by hand.
+
 ## Usage
 
 ```cpp
