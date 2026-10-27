@@ -438,6 +438,60 @@ void testToolCalls() {
               malformedResponse.text.isEmpty());
 }
 
+void testModelCatalog() {
+    printHeader("Model catalog");
+
+    bool idsUnique = true;
+    const auto& all = llm::modelCatalog();
+    for (size_t i = 0; i < all.size(); ++i)
+        for (size_t j = i + 1; j < all.size(); ++j)
+            idsUnique = idsUnique && juce::String(all[i].id) != all[j].id;
+    check("ids are unique", idsUnique);
+
+    const auto* sonnet = llm::findModel("claude-sonnet-5-5");
+    check("finds claude-sonnet-5-5", sonnet != nullptr && sonnet->vendor == llm::Vendor::Anthropic);
+    check("unknown id is nullptr", llm::findModel("not-a-model") == nullptr);
+
+    bool openaiOnResponses = true;
+    for (const auto& m : all)
+        if (m.vendor == llm::Vendor::OpenAI)
+            openaiOnResponses = openaiOnResponses && m.provider == llm::Provider::OpenAIResponses &&
+                                llm::requiresOpenAIResponsesAPI(m.id);
+    check("OpenAI models route to the Responses API", openaiOnResponses);
+    check("gpt-4.1 stays on Chat Completions", !llm::requiresOpenAIResponsesAPI("gpt-4.1"));
+    check("o3 needs the Responses API", llm::requiresOpenAIResponsesAPI("o3"));
+
+    for (auto v : {llm::Vendor::Anthropic, llm::Vendor::OpenAI, llm::Vendor::Google,
+                   llm::Vendor::DeepSeek}) {
+        const auto& d = llm::defaultModel(v);
+        check("default for " + llm::vendorName(v) + " is current and its own",
+              d.vendor == v && !d.legacy);
+        bool noLegacy = true;
+        for (const auto& m : llm::modelsFor(v))
+            noLegacy = noLegacy && !m.legacy && m.vendor == v;
+        check("modelsFor(" + llm::vendorName(v) + ") is current only", noLegacy);
+    }
+    check("Anthropic balanced default is Sonnet 5.5",
+          juce::String(llm::defaultModel(llm::Vendor::Anthropic).id) == "claude-sonnet-5-5");
+    check("Anthropic fast default is Haiku 5.5",
+          juce::String(llm::defaultModel(llm::Vendor::Anthropic, llm::ModelTier::Fast).id) ==
+              "claude-haiku-5-5");
+    check("DeepSeek has no balanced tier: nearest wins",
+          llm::defaultModel(llm::Vendor::DeepSeek, llm::ModelTier::Balanced).vendor ==
+              llm::Vendor::DeepSeek);
+
+    auto config = llm::makeConfig(*sonnet, "sk-test");
+    check("makeConfig provider", config.provider == llm::Provider::Anthropic);
+    check("makeConfig base url", config.baseUrl == "https://api.anthropic.com/v1");
+    check("makeConfig model", config.model == "claude-sonnet-5-5");
+    check("makeConfig temperature gate", config.noTemperature);
+    auto body = juce::JSON::parse(llm::LLMClientFactory::create(config)->buildRequestBody({}));
+    check("Claude 5.5 payload sends no temperature", !body.hasProperty("temperature"));
+
+    auto gemini = llm::makeConfig(llm::defaultModel(llm::Vendor::Google), "k");
+    check("Gemini keeps temperature", !gemini.noTemperature);
+}
+
 //==============================================================================
 // Live tests — require API keys
 //==============================================================================
@@ -503,14 +557,13 @@ void testLiveProviders() {
         config.provider = llm::Provider::OpenAIChat;
         config.baseUrl = "https://api.openai.com/v1";
         config.apiKey = openaiKey;
-        config.model = "gpt-4o-mini";
-        runLiveTest("OpenAI Chat (gpt-4o-mini)", config);
+        config.model = "gpt-4.1-mini";
+        runLiveTest("OpenAI Chat (gpt-4.1-mini)", config);
 
-        config.provider = llm::Provider::OpenAIResponses;
-        config.model = "gpt-5";
-        config.noTemperature = true;
-        config.reasoningEffort = "minimal";
-        runLiveTest("OpenAI Responses (gpt-5)", config);
+        config = llm::makeConfig(llm::defaultModel(llm::Vendor::OpenAI, llm::ModelTier::Fast),
+                                 openaiKey);
+        config.reasoningEffort = "low";
+        runLiveTest("OpenAI Responses (" + config.model + ")", config);
     } else {
         skip("OpenAI Chat");
         skip("OpenAI Responses");
@@ -519,12 +572,9 @@ void testLiveProviders() {
     // Anthropic
     auto anthropicKey = juce::SystemStats::getEnvironmentVariable("ANTHROPIC_API_KEY", "");
     if (anthropicKey.isNotEmpty()) {
-        llm::ProviderConfig config;
-        config.provider = llm::Provider::Anthropic;
-        config.baseUrl = "https://api.anthropic.com/v1";
-        config.apiKey = anthropicKey;
-        config.model = "claude-haiku-4-5-20251001";
-        runLiveTest("Anthropic (claude-haiku)", config);
+        auto config = llm::makeConfig(
+            llm::defaultModel(llm::Vendor::Anthropic, llm::ModelTier::Fast), anthropicKey);
+        runLiveTest("Anthropic (" + config.model + ")", config);
     } else {
         skip("Anthropic");
     }
@@ -532,12 +582,9 @@ void testLiveProviders() {
     // Gemini
     auto geminiKey = juce::SystemStats::getEnvironmentVariable("GEMINI_API_KEY", "");
     if (geminiKey.isNotEmpty()) {
-        llm::ProviderConfig config;
-        config.provider = llm::Provider::Gemini;
-        config.baseUrl = "https://generativelanguage.googleapis.com";
-        config.apiKey = geminiKey;
-        config.model = "gemini-2.5-flash";
-        runLiveTest("Gemini (2.5-flash)", config);
+        auto config = llm::makeConfig(llm::defaultModel(llm::Vendor::Google, llm::ModelTier::Fast),
+                                      geminiKey);
+        runLiveTest("Gemini (" + config.model + ")", config);
     } else {
         skip("Gemini");
     }
@@ -570,6 +617,7 @@ int main() {
     testGeminiPayload();
     testGeminiParsing();
     testToolCalls();
+    testModelCatalog();
 
     // Live tests (skip if no keys)
     testLiveProviders();

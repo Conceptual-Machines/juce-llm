@@ -7,6 +7,7 @@
 #include "llm/LLMClient.cpp"
 #include "llm/LLMClientFactory.cpp"
 #include "llm/LLMTypes.cpp"
+#include "llm/Models.cpp"
 #include "llm/providers/AnthropicClient.cpp"
 #include "llm/providers/GeminiClient.cpp"
 #include "llm/providers/OpenAIChatClient.cpp"
