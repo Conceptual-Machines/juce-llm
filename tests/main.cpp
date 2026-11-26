@@ -207,7 +207,7 @@ void testAnthropicPayload() {
     check("model", body["model"].toString() == "claude-haiku-4-5-20251001");
     check("system", body["system"].getArray() != nullptr && body["system"].getArray()->size() == 1);
     check("messages", body["messages"].getArray()->size() == 1);
-    check("max_tokens", (int)body["max_tokens"] == 4096);
+    check("max_tokens", (int)body["max_tokens"] == 64000);
 
     check("endpoint", client->getEndpointUrl() == "https://api.anthropic.com/v1/messages");
 
