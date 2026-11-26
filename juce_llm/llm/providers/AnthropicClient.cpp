@@ -60,8 +60,10 @@ juce::String AnthropicClient::buildRequestBody(const Request& request) const {
 
     auto* payload = new juce::DynamicObject();
     payload->setProperty("model", config_.model);
+    // The API requires max_tokens. 64000 is the most every current model accepts (Haiku 4.5's
+    // limit), so the fallback never cuts off a long tool call.
     int maxTok = request.maxTokens > 0 ? request.maxTokens
-                                       : (config_.maxTokens > 0 ? config_.maxTokens : 4096);
+                                       : (config_.maxTokens > 0 ? config_.maxTokens : 64000);
     payload->setProperty("max_tokens", maxTok);
     // Some newer models (e.g. Claude Opus 4.8) deprecated the temperature
     // parameter and reject the request if it's present.
