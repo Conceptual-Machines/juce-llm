@@ -117,8 +117,8 @@ struct ProviderConfig {
     // Anthropic: sends adaptive thinking with this display ("summarized", "omitted"), so the
     // stream carries Thinking deltas. Empty sends no thinking parameter.
     juce::String thinkingDisplay;
-    juce::String grammar;          // GBNF grammar for llama-server
-    int connectionTimeoutMs = 0;   // 0 = system default; useful for local server checks
+    juce::String grammar;         // GBNF grammar for llama-server
+    int connectionTimeoutMs = 0;  // 0 = system default; useful for local server checks
 
     // Application identity — used for User-Agent and provider-specific headers
     juce::String userAgent;  // e.g. "MAGDA/0.3.0"

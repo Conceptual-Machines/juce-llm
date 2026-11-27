@@ -239,7 +239,8 @@ void testAnthropicParsing() {
 
     const auto deltas = client->parseStreamDeltas(
         R"({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Reading the phrases."}})");
-    check("thinking delta", deltas.size() == 1 && deltas[0].type == llm::StreamDeltaType::Thinking &&
+    check("thinking delta", deltas.size() == 1 &&
+                                deltas[0].type == llm::StreamDeltaType::Thinking &&
                                 deltas[0].text == "Reading the phrases.");
     llm::StreamAccumulator accumulator;
     accumulator.add(deltas[0]);
