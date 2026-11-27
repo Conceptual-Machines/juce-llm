@@ -135,8 +135,13 @@ juce::String AnthropicClient::buildRequestBody(const Request& request) const {
 
     // NOTE: `output_config.effort` is an OpenAI-ism that Anthropic rejects, so
     // reasoningEffort is deliberately ignored here. Only `output_config.format`
-    // (above) is emitted. Extended thinking uses a separate `thinking` block on
-    // models that support it.
+    // (above) is emitted.
+    if (config_.thinkingDisplay.isNotEmpty()) {
+        auto* thinking = new juce::DynamicObject();
+        thinking->setProperty("type", "adaptive");
+        thinking->setProperty("display", config_.thinkingDisplay);
+        payload->setProperty("thinking", juce::var(thinking));
+    }
 
     // App identification for abuse tracking
     if (config_.userAgent.isNotEmpty()) {
@@ -225,6 +230,10 @@ std::vector<StreamDelta> AnthropicClient::parseStreamDeltas(const juce::String& 
         if (deltaType == "text_delta") {
             delta.type = StreamDeltaType::Text;
             delta.text = json["delta"]["text"].toString();
+            result.push_back(std::move(delta));
+        } else if (deltaType == "thinking_delta") {
+            delta.type = StreamDeltaType::Thinking;
+            delta.text = json["delta"]["thinking"].toString();
             result.push_back(std::move(delta));
         } else if (deltaType == "input_json_delta") {
             delta.type = StreamDeltaType::ToolCallArguments;

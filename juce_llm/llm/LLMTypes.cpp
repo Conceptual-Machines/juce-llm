@@ -146,6 +146,9 @@ void StreamAccumulator::add(const StreamDelta& delta) {
         text_ += delta.text;
         return;
     }
+    // Shown while it streams; the response carries only text and tool calls.
+    if (delta.type == StreamDeltaType::Thinking)
+        return;
 
     auto index = std::find(toolCallIndices_.begin(), toolCallIndices_.end(), delta.toolCallIndex);
     if (index == toolCallIndices_.end()) {
