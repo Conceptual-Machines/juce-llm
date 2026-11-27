@@ -214,6 +214,13 @@ void testAnthropicPayload() {
     auto headers = client->getHeaders();
     check("x-api-key", headers["x-api-key"] == "test-key");
     check("anthropic-version", headers["anthropic-version"] == "2023-06-01");
+    check("no thinking by default", body["thinking"].isVoid());
+
+    config.thinkingDisplay = "summarized";
+    auto thinking = juce::JSON::parse(
+        llm::LLMClientFactory::create(config)->buildRequestBody(request))["thinking"];
+    check("thinking type", thinking["type"].toString() == "adaptive");
+    check("thinking display", thinking["display"].toString() == "summarized");
 }
 
 void testAnthropicParsing() {
@@ -229,6 +236,16 @@ void testAnthropicParsing() {
     auto response = client->parseResponseBody(R"({"content":[{"type":"text","text":"Hello"}]})");
     check("valid response text", response.text == "Hello");
     check("valid response success", response.success);
+
+    const auto deltas = client->parseStreamDeltas(
+        R"({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Reading the phrases."}})");
+    check("thinking delta", deltas.size() == 1 &&
+                                deltas[0].type == llm::StreamDeltaType::Thinking &&
+                                deltas[0].text == "Reading the phrases.");
+    llm::StreamAccumulator accumulator;
+    accumulator.add(deltas[0]);
+    const auto streamed = accumulator.finish();
+    check("thinking is not text or a call", streamed.text.isEmpty() && streamed.toolCalls.empty());
 }
 
 void testGeminiPayload() {

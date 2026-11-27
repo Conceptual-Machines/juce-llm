@@ -114,8 +114,11 @@ struct ProviderConfig {
     // Provider-specific options
     bool noTemperature = false;    // GPT-5 doesn't support temperature
     juce::String reasoningEffort;  // "none", "low", "medium", "high", "xhigh"
-    juce::String grammar;          // GBNF grammar for llama-server
-    int connectionTimeoutMs = 0;   // 0 = system default; useful for local server checks
+    // Anthropic: sends adaptive thinking with this display ("summarized", "omitted"), so the
+    // stream carries Thinking deltas. Empty sends no thinking parameter.
+    juce::String thinkingDisplay;
+    juce::String grammar;         // GBNF grammar for llama-server
+    int connectionTimeoutMs = 0;  // 0 = system default; useful for local server checks
 
     // Application identity — used for User-Agent and provider-specific headers
     juce::String userAgent;  // e.g. "MAGDA/0.3.0"
@@ -217,7 +220,7 @@ using ResponseCallback = std::function<void(Response)>;
 /** Called for each token/chunk during streaming. Return false to cancel. */
 using StreamCallback = std::function<bool(const juce::String& token)>;
 
-enum class StreamDeltaType { Text, ToolCallStart, ToolCallArguments, ToolCallEnd };
+enum class StreamDeltaType { Text, ToolCallStart, ToolCallArguments, ToolCallEnd, Thinking };
 
 /** Provider-neutral streaming event. `toolCallIndex` correlates interleaved
     parallel calls; argument fragments are concatenated in arrival order. */
